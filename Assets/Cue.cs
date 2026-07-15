@@ -48,6 +48,10 @@ public class Cue : MonoBehaviour
     [Tooltip("Multiplier applied to touch delta.x for cue rotation on mobile.")]
     [SerializeField] private float touchRotateMultiplier = 0.05f;
 
+    [Header("Cue Stick Visual Alignment")]
+    [Tooltip("Correction applied on top of the aim rotation. A default Unity Cylinder's length runs along its local Y axis, not Z, so it needs a 90 on X to lie flat and point at the ball instead of standing straight up. If your stick model already points down its own Z axis, set this to (0,0,0).")]
+    [SerializeField] private Vector3 cueStickRotationOffset = new Vector3(90f, 0f, 0f);
+
     // ---------------- internals ----------------
     private bool isReadyToHit = false;
     private bool pendingStrike = false; // set in Update() on strike request, consumed in FixedUpdate()
@@ -96,9 +100,27 @@ public class Cue : MonoBehaviour
         return ok;
     }
 
+    // ---------------- TEMP DIAGNOSTICS ----------------
+    // Remove this whole block once the cue is confirmed moving correctly.
+    [Header("TEMP DEBUG - delete after fixing")]
+    [SerializeField] private bool debugLogging = true;
+    private float debugLogTimer = 0f;
+
     void Update()
     {
-        if (!gameManager.checkconfirmstrike())
+        bool confirmed = gameManager.checkconfirmstrike();
+
+        if (debugLogging)
+        {
+            debugLogTimer += Time.deltaTime;
+            if (debugLogTimer > 0.5f) // log twice a second so Console doesn't flood
+            {
+                debugLogTimer = 0f;
+                Debug.Log($"[CueDebug] confirmstrike={confirmed} | nextplay={gameManager.isNextPlay()} | MouseX raw={Input.GetAxis("Mouse X")} | CueStick pos={CueStick.transform.position} | Cueoffset={Cueoffset}");
+            }
+        }
+
+        if (!confirmed)
         {
             float horizontalInput = Input.GetAxis("Mouse X") * 5f;
 
@@ -265,7 +287,9 @@ public class Cue : MonoBehaviour
     {
         Vector3 direction = Cueball.transform.position - CueStick.transform.position;
         if (direction.sqrMagnitude < 1e-6f) return;
-        CueStick.transform.rotation = Quaternion.LookRotation(direction, Vector3.up);
+        // Base look rotation aims local +Z at the ball; the offset then corrects for
+        // whatever axis the actual mesh's length runs along (see tooltip above).
+        CueStick.transform.rotation = Quaternion.LookRotation(direction, Vector3.up) * Quaternion.Euler(cueStickRotationOffset);
     }
 
     private void ApplyForceToCueBall()
