@@ -5,11 +5,12 @@ public class Cue : MonoBehaviour
 {
     // ---------------- Game refs ----------------
     [Header("Game Manager")]
+    [Tooltip("Optional: if left empty the GameManager.Instance will be used.")]
     [SerializeField] protected GameManager gameManager;
     [SerializeField] protected GameObject Cueball;
 
     [Header("Cue Stick Refs")]
-    [SerializeField] private GameObject CueStick;     // visual stick
+    [SerializeField] private GameObject CueStick;     // visual stick (placeholder only)
     [SerializeField] private GameObject cuestickref;  // empty whose +Z points to cue ball
 
     // ---------------- Physics ----------------
@@ -18,59 +19,61 @@ public class Cue : MonoBehaviour
     [SerializeField] private float Drag = 0.5f;
     [SerializeField] private float AngularDrag = 0.5f;
 
-    // ---------------- Prediction lines ----------------
-    [Header("Prediction Lines")]
-    [SerializeField] private LineRenderer aimLineCue;     // cue-ball path (white)
-    [SerializeField] private LineRenderer aimLineObject;  // object-ball path (red)
-    [SerializeField] private int maxbounces = 1;       // reflections BEFORE any ball is hit
-    [SerializeField] private float maxDistance = 60f;     // global safety cap
+    // ---------------- Strike Control (Inspector Testing) ----------------
+    [Header("Strike Control (Inspector Testing)")]
+    [Range(0.01f, 15f)]
+    [SerializeField] private float forceMultiplier = 1.0f; // scales the final force (live)
+    [Range(-45f, 45f)]
+    [SerializeField] private float angleOffsetDegrees = 0f; // horizontal English
+    [Range(-30f, 30f)]
+    [SerializeField] private float verticalAngleDegrees = 0f; // draw/follow
+    [SerializeField] private bool applySpinTorque = true; // apply rotational force
 
-    [Tooltip("When nothing is hit, straight segment is clamped to this length.")]
+    // ---------------- Prediction lines (kept simple) ----------------
+    [Header("Prediction Lines")]
+    [SerializeField] private LineRenderer aimLineCue;     // cue-ball path
+    [SerializeField] private LineRenderer aimLineObject;  // object-ball path
+    [SerializeField] private float maxDistance = 60f;
     [SerializeField] private float maxNoHitLength = 8f;
 
     [Header("Contact Stub Settings (both red & white)")]
-    [Tooltip("Length for BOTH post-collision stubs (red object line and small white cue line).")]
     [SerializeField] private float contactStubLength = 0.35f;
-    [Tooltip("Trim a small gap before rail/pocket when drawing the stubs.")]
-    [SerializeField] private float contactStubTrimGap = 0.05f;
 
     // ---------------- Layers ----------------
     [Header("Raycast Layers")]
-    [SerializeField] private LayerMask ballLayer;    // all balls
-    [SerializeField] private LayerMask tableLayer;   // cushions/borders/table (non-trigger)
-    [SerializeField] private LayerMask pocketLayer;  // pocket mouths (TRIGGER colliders)
+    [SerializeField] private LayerMask ballLayer;
+    [SerializeField] private LayerMask tableLayer;
+    [SerializeField] private LayerMask pocketLayer;
     [SerializeField] private bool stopAtPockets = true;
 
     [Tooltip("Read from SphereCollider if <= 0")]
     [SerializeField] private float cueBallRadius = -1f;
 
-    [Header("Mobile Input")]
-    [Tooltip("Multiplier applied to touch delta.x for cue rotation on mobile.")]
-    [SerializeField] private float touchRotateMultiplier = 0.05f;
-
-    [Header("Cue Stick Visual Alignment")]
-    [Tooltip("Correction applied on top of the aim rotation. A default Unity Cylinder's length runs along its local Y axis, not Z, so it needs a 90 on X to lie flat and point at the ball instead of standing straight up. If your stick model already points down its own Z axis, set this to (0,0,0).")]
-    [SerializeField] private Vector3 cueStickRotationOffset = new Vector3(90f, 0f, 0f);
-
     // ---------------- internals ----------------
     private bool isReadyToHit = false;
-    private bool pendingStrike = false; // set in Update() on strike request, consumed in FixedUpdate()
-    private Vector3 Cueoffset;
+    private bool pendingStrike = false;
     private Rigidbody cueballRigidbody;
 
-    // --------------- Unity ----------------
+    // reuse buffer
+    private readonly List<Vector3> aimPoints = new List<Vector3>(4);
+
+    // debug
+    [Header("TEMP DEBUG - delete after fixing")]
+    [SerializeField] private bool debugLogging = false;
+    private float debugLogTimer = 0f;
+
     void Start()
     {
+        // prefer inspector reference but fall back to singleton
+        if (gameManager == null && GameManager.Instance != null) gameManager = GameManager.Instance;
+
         if (!ValidateReferences())
         {
-            enabled = false; // fail loudly instead of throwing NullReferenceException mid-game
+            enabled = false;
             return;
         }
 
-        Cueoffset = CueStick.transform.position - Cueball.transform.position;
-
-        cueballRigidbody = Cueball.GetComponent<Rigidbody>();
-        if (!cueballRigidbody) cueballRigidbody = Cueball.AddComponent<Rigidbody>();
+        cueballRigidbody = Cueball.GetComponent<Rigidbody>() ?? Cueball.AddComponent<Rigidbody>();
         cueballRigidbody.mass = Mass;
         cueballRigidbody.drag = Drag;
         cueballRigidbody.angularDrag = AngularDrag;
@@ -83,7 +86,7 @@ public class Cue : MonoBehaviour
                 var s = Cueball.transform.lossyScale;
                 cueBallRadius = sc.radius * Mathf.Max(s.x, s.y, s.z);
             }
-            else cueBallRadius = 0.0285f; // ~57mm dia / 2
+            else cueBallRadius = 0.0285f;
         }
 
         isReadyToHit = true;
@@ -100,65 +103,38 @@ public class Cue : MonoBehaviour
         return ok;
     }
 
-    // ---------------- TEMP DIAGNOSTICS ----------------
-    // Remove this whole block once the cue is confirmed moving correctly.
-    [Header("TEMP DEBUG - delete after fixing")]
-    [SerializeField] private bool debugLogging = true;
-    private float debugLogTimer = 0f;
-
     void Update()
     {
-        bool confirmed = gameManager.checkconfirmstrike();
+        // ensure GameManager reference
+        if (gameManager == null && GameManager.Instance != null) gameManager = GameManager.Instance;
+        if (gameManager == null) return;
+
+        bool confirmed = gameManager.IsConfirmMode;
 
         if (debugLogging)
         {
             debugLogTimer += Time.deltaTime;
-            if (debugLogTimer > 0.5f) // log twice a second so Console doesn't flood
+            if (debugLogTimer > 0.5f)
             {
                 debugLogTimer = 0f;
-                Debug.Log($"[CueDebug] confirmstrike={confirmed} | nextplay={gameManager.isNextPlay()} | MouseX raw={Input.GetAxis("Mouse X")} | CueStick pos={CueStick.transform.position} | Cueoffset={Cueoffset}");
+                Debug.Log($"[CueDebug] confirmMode={confirmed} | nextplay={gameManager.isNextPlay()} | strikeForce={gameManager.GetStrikeForce()} | forceMul={forceMultiplier} | angle={angleOffsetDegrees}°");
             }
         }
 
-        if (!confirmed)
-        {
-            float horizontalInput = Input.GetAxis("Mouse X") * 5f;
-
-            // On mobile, prefer the first touch drag for horizontal rotation
-            if (Application.isMobilePlatform && Input.touchCount > 0)
-            {
-                Touch t = Input.GetTouch(0);
-                if (t.phase == TouchPhase.Moved)
-                {
-                    horizontalInput = t.deltaPosition.x * touchRotateMultiplier;
-                }
-            }
-
-            if (Mathf.Abs(horizontalInput) > Mathf.Epsilon)
-            {
-                Quaternion rotation = Quaternion.AngleAxis(horizontalInput, Vector3.up);
-                Cueoffset = rotation * Cueoffset;
-            }
-            if (gameManager.isNextPlay()) UpdateCue();
-            LookAtBall();
-        }
-
-        if (isReadyToHit && !gameManager.checkconfirmstrike())
+        // Prediction and strike logic remain here (visual stick control moved to CueVisualController).
+        if (isReadyToHit && !confirmed)
             GenerateAimPrediction();
 
-        // Only the REQUEST is captured here. The actual physics force is applied in
-        // FixedUpdate() below - keeps shot power/behavior identical regardless of frame rate
-        // (dev doc Section 2: "Fixed timestep physics... never frame-dependent Update").
-        if (gameManager.GetIsStrike() && isReadyToHit)
+        // Only start strike when both confirmed AND strike requested
+        bool strikeRequested = gameManager.IsStrikeRequested;
+        if (strikeRequested && isReadyToHit && confirmed)
         {
             pendingStrike = true;
             isReadyToHit = false;
+            Debug.Log("[Cue] Strike pending - will execute in FixedUpdate");
         }
         else
         {
-            // Previously this line ran unconditionally every frame, which meant it could
-            // immediately overwrite the "isReadyToHit = false" set above. Moved into the
-            // else branch so a pending strike isn't clobbered in the same frame.
             isReadyToHit = gameManager.isNextPlay();
         }
     }
@@ -172,148 +148,140 @@ public class Cue : MonoBehaviour
         }
     }
 
-    // --------------- Prediction ----------------
-    private static Vector3 Flat(Vector3 v) => Vector3.ProjectOnPlane(v, Vector3.up).normalized;
+    // flatten to XZ
+    private static Vector3 Flat(Vector3 v)
+    {
+        v.y = 0f;
+        return v.sqrMagnitude < 1e-6f ? Vector3.zero : v.normalized;
+    }
 
+    // simplified, readable prediction: single straight segment
     private void GenerateAimPrediction()
     {
-        if (!aimLineCue) return;
+        if (aimLineCue == null) return;
         if (aimLineObject) aimLineObject.positionCount = 0;
 
         float tableY = Cueball.transform.position.y;
-
-        Vector3 origin = Cueball.transform.position + Vector3.up * 0.01f; // avoid self-hit
+        Vector3 origin = Cueball.transform.position + Vector3.up * 0.01f;
         Vector3 dir = Flat(Cueball.transform.position - cuestickref.transform.position);
-        if (dir.sqrMagnitude < 1e-6f) return;
+        if (dir == Vector3.zero) return;
 
-        List<Vector3> cuePts = new List<Vector3> { new Vector3(origin.x, tableY, origin.z) };
+        aimPoints.Clear();
+        aimPoints.Add(new Vector3(origin.x, tableY, origin.z));
 
-        float remain = maxDistance;
-        int b = 0;
+        int railMask = tableLayer | pocketLayer;
 
-        while (b <= maxbounces && remain > 0f)
+        RaycastHit ballHit;
+        bool hasBall = Physics.SphereCast(origin, cueBallRadius, dir, out ballHit, maxDistance, ballLayer, QueryTriggerInteraction.Ignore);
+        float dBall = hasBall ? ballHit.distance : float.PositiveInfinity;
+
+        RaycastHit railHit;
+        bool hasRail = Physics.Raycast(origin, dir, out railHit, maxDistance, railMask, QueryTriggerInteraction.Collide);
+        float dRail = hasRail ? railHit.distance : float.PositiveInfinity;
+
+        if (dBall < dRail)
         {
-            // rails + pockets (Collide with triggers to see pocket mouths)
-            int railMask = tableLayer | pocketLayer;
-            RaycastHit railHit;
-            bool hasRail = Physics.Raycast(origin, dir, out railHit, remain, railMask, QueryTriggerInteraction.Collide);
-            float dRail = hasRail ? railHit.distance : float.PositiveInfinity;
+            Vector3 contact = origin + dir * dBall; contact.y = tableY;
+            aimPoints.Add(contact);
 
-            // balls only (SphereCast for correct contact normal)
-            RaycastHit ballHit;
-            bool hasBall = Physics.SphereCast(origin, cueBallRadius, dir, out ballHit, remain, ballLayer, QueryTriggerInteraction.Ignore);
-            float dBall = hasBall ? ballHit.distance : float.PositiveInfinity;
-
-            if (dBall < dRail) // --- BALL contact: split paths ---
+            if (aimLineObject)
             {
-                Vector3 contact = origin + dir * dBall; contact.y = tableY;
-                cuePts.Add(contact);
-
-                // object direction = -normal (line of centers)
                 Vector3 objDir = Flat(-ballHit.normal);
-
-                // cue direction AFTER collision (perpendicular component to objDir)
-                Vector3 cueDirAfter = Flat(dir - Vector3.Project(dir, objDir));
-
-                // ---- draw BOTH stubs with SAME length ----
-                float len = Mathf.Max(0.01f, contactStubLength);
-
-                // trim vs rail/pocket for object stub
-                len = TrimLengthAgainstRail(contact, objDir, len, railMask);
-
-                // 1) RED object-ball stub
-                if (aimLineObject)
-                {
-                    Vector3 a = contact; a.y = tableY;
-                    Vector3 bPt = a + objDir * len; bPt.y = tableY;
-                    aimLineObject.positionCount = 2;
-                    aimLineObject.SetPosition(0, a);
-                    aimLineObject.SetPosition(1, bPt);
-                }
-
-                // 2) WHITE cue post-collision stub (same len)
-                if (cueDirAfter.sqrMagnitude > 1e-6f)
-                {
-                    float lenCue = TrimLengthAgainstRail(contact, cueDirAfter, len, railMask);
-                    Vector3 end = contact + cueDirAfter * lenCue; end.y = tableY;
-                    cuePts.Add(end);
-                }
-
-                break; // stop at first object ball
-            }
-            else if (hasRail) // --- RAIL or POCKET ---
-            {
-                bool isPocket = ((1 << railHit.collider.gameObject.layer) & pocketLayer) != 0;
-
-                Vector3 rp = railHit.point; rp.y = tableY;
-                cuePts.Add(rp);
-                remain -= railHit.distance;
-
-                if (stopAtPockets && isPocket)
-                    break; // stop at pocket mouth; no reflect
-
-                // reflect on cushion
-                Vector3 refl = Vector3.Reflect(dir, Flat(railHit.normal));
-                origin = railHit.point + refl * 0.002f; origin.y = tableY;
-                dir = Flat(refl);
-                b++;
-            }
-            else // --- nothing hit: clamp straight length ---
-            {
-                Vector3 end = origin + dir * Mathf.Min(remain, maxNoHitLength);
-                end.y = tableY;
-                cuePts.Add(end);
-                break;
+                Vector3 bPt = contact + objDir * Mathf.Max(0.01f, contactStubLength);
+                bPt.y = tableY;
+                aimLineObject.positionCount = 2;
+                aimLineObject.SetPosition(0, contact);
+                aimLineObject.SetPosition(1, bPt);
             }
         }
-
-        aimLineCue.positionCount = cuePts.Count;
-        aimLineCue.SetPositions(cuePts.ToArray());
-    }
-
-    // trim helper: if rail/pocket is closer than desired length, reduce and leave a small gap
-    private float TrimLengthAgainstRail(Vector3 start, Vector3 dir, float desiredLen, int railMask)
-    {
-        RaycastHit hit;
-        if (Physics.Raycast(start + Vector3.up * 0.01f, dir, out hit, desiredLen, railMask, QueryTriggerInteraction.Collide))
+        else if (hasRail)
         {
-            return Mathf.Max(0.01f, hit.distance - Mathf.Max(0f, contactStubTrimGap));
+            Vector3 rp = railHit.point; rp.y = tableY;
+            aimPoints.Add(rp);
         }
-        return desiredLen;
-    }
+        else
+        {
+            Vector3 end = origin + dir * Mathf.Min(maxNoHitLength, maxDistance);
+            end.y = tableY;
+            aimPoints.Add(end);
+        }
 
-    // --------------- Aim + Strike ----------------
-    private void LookAtBall()
-    {
-        Vector3 direction = Cueball.transform.position - CueStick.transform.position;
-        if (direction.sqrMagnitude < 1e-6f) return;
-        // Base look rotation aims local +Z at the ball; the offset then corrects for
-        // whatever axis the actual mesh's length runs along (see tooltip above).
-        CueStick.transform.rotation = Quaternion.LookRotation(direction, Vector3.up) * Quaternion.Euler(cueStickRotationOffset);
+        aimLineCue.positionCount = aimPoints.Count;
+        aimLineCue.SetPositions(aimPoints.ToArray());
     }
 
     private void ApplyForceToCueBall()
     {
-        RaycastHit hit;
-        if (Physics.Raycast(cuestickref.transform.position, cuestickref.transform.forward, out hit, 5f, ~0, QueryTriggerInteraction.Ignore))
+        // Ensure we have GameManager access
+        if (gameManager == null)
         {
-            if (hit.collider.gameObject == Cueball)
+            if (GameManager.Instance != null) gameManager = GameManager.Instance;
+            if (gameManager == null) return;
+        }
+
+        // Get base direction from cuestick to ball
+        Vector3 toBall = Cueball.transform.position - cuestickref.transform.position;
+        float dist = toBall.magnitude;
+
+        if (dist < 0.001f)
+        {
+            Debug.LogWarning("Cue too close to ball to apply force!");
+            gameManager.ClearStrikeRequest();
+            gameManager.ClearConfirmMode();
+            return;
+        }
+
+        Vector3 normalizedDir = toBall.normalized;
+
+        // Apply angle offsets (English/topspin)
+        Vector3 forceDirection = CalculateForceDirection(normalizedDir);
+
+        // Get base force and apply multiplier (live)
+        float baseForceMagnitude = gameManager.GetStrikeForce();
+        float finalForceMagnitude = baseForceMagnitude * forceMultiplier;
+
+        // Ensure cue ball is dynamic
+        if (cueballRigidbody.isKinematic)
+        {
+            Debug.LogWarning("Cueball Rigidbody is kinematic. Setting isKinematic = false so physics can move it.", this);
+            cueballRigidbody.isKinematic = false;
+        }
+
+        // Diagnostics & ensure awake
+        Debug.Log($"[Cue] Applying impulse. mass={cueballRigidbody.mass}, preVel={cueballRigidbody.velocity}, finalImpulse={finalForceMagnitude}", this);
+        cueballRigidbody.WakeUp();
+
+        // Apply as an impulse so mass/drag/angularDrag are respected.
+        cueballRigidbody.AddForce(forceDirection * finalForceMagnitude, ForceMode.Impulse);
+
+        // Apply spin if enabled (angular impulse)
+        if (applySpinTorque)
+        {
+            Vector3 spinAxis = Vector3.Cross(forceDirection, Vector3.up);
+            if (spinAxis.sqrMagnitude > 0.01f)
             {
-                Vector3 forceDirection = (Cueball.transform.position - cuestickref.transform.position).normalized;
-                cueballRigidbody.AddForce(forceDirection * gameManager.GetStrikeForce(), ForceMode.Force);
+                float spinMagnitude = finalForceMagnitude * 0.1f; // tuned factor
+                cueballRigidbody.AddTorque(spinAxis.normalized * spinMagnitude, ForceMode.Impulse);
             }
         }
-        gameManager.SetIsStrike(false);
-        gameManager.SetConfirmStrike(false);
+
+        Debug.Log($"[Cue Strike] Impulse={finalForceMagnitude:F2} | Angle={angleOffsetDegrees}° | Vertical={verticalAngleDegrees}° | Direction={forceDirection} | postVel={cueballRigidbody.velocity}", this);
+
+        // clear requests/confirm after applying
+        gameManager.ClearStrikeRequest();
+        gameManager.ClearConfirmMode();
     }
 
-    private void UpdateCue()
+    // Calculate force direction with angle offsets
+    private Vector3 CalculateForceDirection(Vector3 baseDirection)
     {
-        CueStick.transform.position = Cueball.transform.position + Cueoffset;
-        isReadyToHit = true;
-    }
+        // Horizontal angle (English - left/right spin) — rotate around Y
+        Vector3 horizontalRotated = Quaternion.AngleAxis(angleOffsetDegrees, Vector3.up) * baseDirection;
 
-    // NOTE: the original WaitAndDo() coroutine and its "waittime" field were dead code -
-    // never called anywhere - so they've been removed. Re-add if you have a planned use
-    // for a post-strike delay (e.g. locking input briefly after a shot).
+        // Vertical angle (Draw/follow — rotate around right axis)
+        Vector3 rightAxis = Vector3.Cross(Vector3.up, horizontalRotated).normalized;
+        Vector3 forceDir = Quaternion.AngleAxis(verticalAngleDegrees, rightAxis) * horizontalRotated;
+
+        return forceDir.normalized;
+    }
 }

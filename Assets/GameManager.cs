@@ -1,18 +1,18 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class GameManager : MonoBehaviour
 {
     // ---------------- Singleton ----------------
-    // Dev doc requires a central GameManager singleton owning turn state.
     public static GameManager Instance { get; private set; }
 
     [Header("Game Settings")]
-    [SerializeField]
-    private List<Rigidbody> balls; // List of all balls in the game
+    [SerializeField] private List<Rigidbody> balls; // all balls in the game
 
     [Header("Strike Settings")]
-    [SerializeField] private float strikeForceMultiplier = 10000f; // was a hardcoded magic number
+    [SerializeField] private float strikeForceMultiplier = 10000f;
+    [SerializeField] private float baseStrikeForce = 30f; // Inspector control for testing
 
     [Header("Ball Rest Thresholds")]
     [Tooltip("Above this speed, a ball counts as 'moving' and blocks the next shot.")]
@@ -20,24 +20,23 @@ public class GameManager : MonoBehaviour
     [Tooltip("Below this speed, a moving ball is snapped to a full stop to kill physics jitter.")]
     [SerializeField] private float snapToZeroThreshold = 0.09f;
 
-    protected bool nextplay = false;
-    protected float StrikeForce = 30f; // force applied to the cue ball when hit
-    protected bool isstrike = false;   // flag to send the strike to the cue ball
-    protected bool confirmstrike = false; // flag to confirm the strike
+    // state
+    private bool nextplay = false;
+    private bool strikeRequested = false;
+    private bool confirmMode = false;
+    private bool inputLocked = false;
 
     private CameraSwitching cameraSwitching;
     private bool wasMovingLastCheck = false;
 
-    // Event-driven hook per architecture doc (Section 2: "Event-driven, not polling").
-    // Fires exactly once, on the tick balls transition from moving -> fully stopped.
-    public event System.Action OnAllBallsStopped;
+    // Event: fires once when balls transition moving -> stopped
+    public event Action OnAllBallsStopped;
 
     void Awake()
     {
-        // Basic singleton guard so only one GameManager ever owns turn state.
         if (Instance != null && Instance != this)
         {
-            Debug.LogWarning("Duplicate GameManager found in scene - destroying the extra one.", this);
+            Debug.LogWarning("Duplicate GameManager found - destroying extra.", this);
             Destroy(gameObject);
             return;
         }
@@ -46,10 +45,11 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
-        // Cursor.lockState = CursorLockMode.Locked; // left disabled for mobile/editor testing
         cameraSwitching = FindObjectOfType<CameraSwitching>();
         if (cameraSwitching == null)
-            Debug.LogWarning("GameManager: No CameraSwitching found in scene - Cam1/Cam2/Cam3 will do nothing.", this);
+            Debug.LogWarning("GameManager: No CameraSwitching found in scene.", this);
+
+        Debug.Log($"GameManager initialized: baseStrikeForce={baseStrikeForce} strikeForceMultiplier={strikeForceMultiplier} => GetStrikeForce()={GetStrikeForce()}");
     }
 
     public void Cam1() => cameraSwitching?.SwitchToTopDownCamera();
@@ -58,28 +58,19 @@ public class GameManager : MonoBehaviour
 
     public bool isNextPlay() => nextplay;
 
-    // Physics-derived state (ball velocity) must be evaluated on the physics tick,
-    // not the render frame - this is what makes shot resolution frame-rate independent
-    // (dev doc Section 2: "Fixed timestep physics").
     void FixedUpdate()
     {
         CheckNextPlay(balls);
     }
 
-    // First we check each ball's speed.
-    // Any ball moving above threshold => next play blocked.
-    // Any ball crawling below the snap threshold => forced to a hard stop (removes jitter).
+    // ----- Ball motion / next-play logic -----
     public void CheckNextPlay(List<Rigidbody> balls)
     {
         bool anyMoving = false;
 
-        // NOTE: intentionally does NOT break early - the previous version stopped scanning
-        // the instant it found one moving ball, so any other near-stationary ball never got
-        // its snap-to-zero cleanup applied until it happened to be first in the list.
-        // At 22 balls max this full scan is negligible cost either way.
         foreach (Rigidbody ball in balls)
         {
-            if (ball == null) continue; // guards against a potted/pooled ball reference
+            if (ball == null) continue;
 
             float speed = ball.velocity.magnitude;
             if (speed > moveThreshold)
@@ -102,39 +93,63 @@ public class GameManager : MonoBehaviour
         wasMovingLastCheck = anyMoving;
     }
 
-    public bool checkconfirmstrike() => confirmstrike;
+    // ----- Confirm / Strike API (explicit, UI-friendly) -----
+    public bool IsConfirmMode => confirmMode;
+    public bool IsStrikeRequested => strikeRequested;
+    public bool IsInputLocked => inputLocked;
 
-    public void buttonstrike()
+    // Called by the single on-screen button.
+    // First press enters Confirm mode (locks input). Second press requests the strike.
+    public void ConfirmButtonPressed()
     {
-        confirmstrike = !confirmstrike;
-        Debug.Log("Confirmation of strike is " + confirmstrike);
+        // Only allow confirming when table is ready for a shot
+        if (!nextplay)
+        {
+            Debug.Log("Cannot confirm while balls are moving.");
+            return;
+        }
+
+        if (!confirmMode)
+        {
+            // Enter confirm mode: lock input, change UI to "Strike!"
+            confirmMode = true;
+            inputLocked = true;
+            Debug.Log("Confirm pressed: input locked. Button should now say 'Strike!'");
+        }
+        else
+        {
+            // Already confirmed: request strike (do not clear confirmMode here).
+            RequestStrike();
+            Debug.Log("Confirm pressed again: strike requested.");
+        }
     }
 
-    public void SetConfirmStrike(bool val)
+    // Request/clear strike request (Cue consumes these)
+    public void RequestStrike()
     {
-        Debug.Log("Confirmation of strike is " + val);
-        confirmstrike = val;
+        strikeRequested = true;
     }
 
-    public float GetStrikeForce() => StrikeForce;
+    public void ClearStrikeRequest()
+    {
+        strikeRequested = false;
+    }
 
+    // Called by Cue after applying force to clear confirm and input lock
+    public void ClearConfirmMode()
+    {
+        confirmMode = false;
+        inputLocked = false;
+    }
+
+    // Strike force accessors - computed live so inspector changes take effect immediately
+    public float GetStrikeForce() => baseStrikeForce * strikeForceMultiplier;
+
+    // Set base strike force (inspector/slider can call this)
     public void SetStrikeForce(float force)
     {
-        if (force <= 0f)
-            force += 0.1f;
-        StrikeForce = force * strikeForceMultiplier;
+        if (force <= 0f) force = 0.1f;
+        baseStrikeForce = force;
+        Debug.Log($"Strike base force set to: {baseStrikeForce} => GetStrikeForce()={GetStrikeForce()}");
     }
-
-    public bool GetIsStrike() => isstrike;
-
-    public void SetIsStrike()
-    {
-        Debug.Log("The Ball is striked with force: " + StrikeForce);
-        isstrike = true;
-    }
-
-    public void SetIsStrike(bool strike) => isstrike = strike;
 }
-
-
-
