@@ -37,7 +37,7 @@ public class Cue : MonoBehaviour
     [SerializeField] private float maxNoHitLength = 8f;
 
     [Header("Contact Stub Settings (both red & white)")]
-    [SerializeField] private float contactStubLength = 0.35f;
+    [SerializeField] private float contactStubLength = 5f;
 
     // ---------------- Layers ----------------
     [Header("Raycast Layers")]
@@ -269,7 +269,7 @@ public class Cue : MonoBehaviour
 
         // clear requests/confirm after applying
         gameManager.ClearStrikeRequest();
-        gameManager.ClearConfirmMode();
+       // gameManager.ClearConfirmMode();
     }
 
     // Calculate force direction with angle offsets
