@@ -3,6 +3,7 @@ using UnityEngine;
 
 public class Cue : MonoBehaviour
 {
+    [Header("Beta Cue Hitting Logic")]
     // ---------------- Game refs ----------------
     [Header("Game Manager")]
     [Tooltip("Optional: if left empty the GameManager.Instance will be used.")]
@@ -35,6 +36,10 @@ public class Cue : MonoBehaviour
     [SerializeField] private LineRenderer aimLineObject;  // object-ball path
     [SerializeField] private float maxDistance = 60f;
     [SerializeField] private float maxNoHitLength = 8f;
+    [SerializeField] private int maxReflectionBounces = 3;      // max number of cushion bounces to predict
+    [SerializeField] private float reflectionEpsilon = 0.02f;  // small
+    [SerializeField] private GameObject ghostBallPrefab;
+    private GameObject currentGhostBall;
 
     [Header("Contact Stub Settings (both red & white)")]
     [SerializeField] private float contactStubLength = 5f;
@@ -88,7 +93,8 @@ public class Cue : MonoBehaviour
             }
             else cueBallRadius = 0.0285f;
         }
-
+        currentGhostBall = Instantiate(ghostBallPrefab);
+        currentGhostBall.SetActive(false);
         isReadyToHit = true;
     }
 
@@ -171,39 +177,126 @@ public class Cue : MonoBehaviour
 
         int railMask = tableLayer | pocketLayer;
 
-        RaycastHit ballHit;
-        bool hasBall = Physics.SphereCast(origin, cueBallRadius, dir, out ballHit, maxDistance, ballLayer, QueryTriggerInteraction.Ignore);
-        float dBall = hasBall ? ballHit.distance : float.PositiveInfinity;
+        Vector3 currentOrigin = origin;
+        Vector3 currentDir = dir;
+        float remainingDistance = maxDistance;
+        int bounces = 0;
 
-        RaycastHit railHit;
-        bool hasRail = Physics.Raycast(origin, dir, out railHit, maxDistance, railMask, QueryTriggerInteraction.Collide);
-        float dRail = hasRail ? railHit.distance : float.PositiveInfinity;
-
-        if (dBall < dRail)
+        // helper to test if a RaycastHit is a pocket by layer
+        bool IsPocket(RaycastHit h)
         {
-            Vector3 contact = origin + dir * dBall; contact.y = tableY;
-            aimPoints.Add(contact);
+            if (h.collider == null) return false;
+            int hitLayerMask = 1 << h.collider.gameObject.layer;
+            return (pocketLayer.value & hitLayerMask) != 0;
+        }
 
-            if (aimLineObject)
+        while (remainingDistance > 0f && bounces <= maxReflectionBounces)
+        {
+            // 1) check ball along this segment
+            RaycastHit ballHit;
+            bool hasBall = Physics.SphereCast(currentOrigin, cueBallRadius, currentDir, out ballHit, remainingDistance, ballLayer, QueryTriggerInteraction.Ignore);
+            float dBall = hasBall ? ballHit.distance : float.PositiveInfinity;
+
+            // 2) check rail/pocket along this segment
+            RaycastHit railHit;
+            bool hasRail = Physics.Raycast(currentOrigin, currentDir, out railHit, remainingDistance, railMask, QueryTriggerInteraction.Collide);
+            float dRail = hasRail ? railHit.distance : float.PositiveInfinity;
+
+            if (dBall < dRail)
             {
-                Vector3 objDir = Flat(-ballHit.normal);
-                Vector3 bPt = contact + objDir * Mathf.Max(0.01f, contactStubLength);
-                bPt.y = tableY;
-                aimLineObject.positionCount = 2;
-                aimLineObject.SetPosition(0, contact);
-                aimLineObject.SetPosition(1, bPt);
+                // cue-ball will contact the object ball before any rail
+                Vector3 contact = currentOrigin + currentDir * dBall;
+                contact.y = tableY;
+                aimPoints.Add(contact);
+                if (currentGhostBall != null)
+                {
+                    currentGhostBall.SetActive(true);
+                    // Formula: Origin + (Direction * Distance)
+                    Vector3 ghostBallCenter = origin + (currentDir * ballHit.distance);
+                    // Position at the exact point of impact
+                    currentGhostBall.transform.position = ghostBallCenter;
+                }
+                // Changes Second line which is red
+                if (aimLineObject)
+                {
+                    Vector3 objDir = Flat(-ballHit.normal);
+                    float stubLen = Mathf.Max(0.01f, contactStubLength);
+
+                    // default end point if no cushion between contact and stubLen
+                    Vector3 defaultBPt = contact + objDir * stubLen;
+                    defaultBPt.y = tableY;
+
+                    // small offset to avoid immediate overlap with the ball collider
+                    Vector3 stubOrigin = contact + objDir * 0.01f;
+                    stubOrigin.y = tableY;
+
+                    // check specifically for cushions (tableLayer)
+                    RaycastHit stubHit;
+                    bool hitCushion = Physics.Raycast(stubOrigin, objDir, out stubHit, stubLen, tableLayer, QueryTriggerInteraction.Collide);
+
+                    Vector3 bPt = hitCushion ? new Vector3(stubHit.point.x, tableY, stubHit.point.z) : defaultBPt;
+
+                    aimLineObject.positionCount = 2;
+                    aimLineObject.SetPosition(0, contact);
+                    aimLineObject.SetPosition(1, bPt);
+                }
+
+                // finished prediction
+                break;
             }
-        }
-        else if (hasRail)
-        {
-            Vector3 rp = railHit.point; rp.y = tableY;
-            aimPoints.Add(rp);
-        }
-        else
-        {
-            Vector3 end = origin + dir * Mathf.Min(maxNoHitLength, maxDistance);
-            end.y = tableY;
-            aimPoints.Add(end);
+            else if (hasRail)
+            {
+                Vector3 rp = railHit.point;
+                rp.y = tableY;
+                aimPoints.Add(rp);
+
+                // If it's a pocket and we should stop at pockets, stop here.
+                if (stopAtPockets && IsPocket(railHit))
+                {
+                    break;
+                }
+
+                // Compute reflection and continue
+                Vector3 refl = Vector3.Reflect(currentDir, railHit.normal);
+                refl = Flat(refl);
+                if (refl == Vector3.zero)
+                {
+                    // can't continue predictably
+                    break;
+                }
+
+                // Move origin slightly along reflection to avoid immediately hitting the same collider
+                currentOrigin = railHit.point + refl * reflectionEpsilon;
+                currentOrigin.y = origin.y; // keep same height for flattened prediction
+
+                // reduce remaining distance by distance consumed
+                remainingDistance -= (dRail + reflectionEpsilon);
+
+                currentDir = refl;
+                bounces++;
+                continue;
+            }
+            else
+            {
+                // no hit within remaining distance -> draw until maxNoHitLength or remainingDistance
+                // also clamp to maxDistance so the white line never exceeds that inspector value
+                float len = Mathf.Min(maxNoHitLength, remainingDistance, maxDistance);
+
+                if (currentGhostBall != null) currentGhostBall.SetActive(false);
+                // keep previous behavior: if a contactStubLength is set, clamp to that too
+                if (contactStubLength > 0f)
+                    len = Mathf.Min(len, contactStubLength);
+
+                // check for cushions between currentOrigin and intended end
+                RaycastHit cushionHit;
+                bool hitCushion = Physics.Raycast(currentOrigin, currentDir, out cushionHit, len, tableLayer, QueryTriggerInteraction.Collide);
+
+                Vector3 end = hitCushion ? new Vector3(cushionHit.point.x, tableY, cushionHit.point.z)
+                                         : currentOrigin + currentDir * len;
+                end.y = tableY;
+                aimPoints.Add(end);
+                break;
+            }
         }
 
         aimLineCue.positionCount = aimPoints.Count;
