@@ -20,6 +20,10 @@ public class GameManager : MonoBehaviour
     // shot finishes (OnAllBallsStopped) by whatever consumes it (Phase 3/4 rules later).
     public List<Rigidbody> PottedThisShot { get; private set; } = new List<Rigidbody>();
 
+    // Phase 4: first ball the cue ball touches this shot - null means it hit nothing
+    // (or only cushions). Reported by CueBallContactTracker.cs on the cue ball.
+    private Rigidbody firstBallContacted = null;
+
     // Fires once per potted ball, the instant it goes in - lets other systems (crowd reaction,
     // SFX, future scoring) react without GameManager needing to know about them directly.
     public event Action<Rigidbody> OnBallPottedEvent;
@@ -72,6 +76,11 @@ public class GameManager : MonoBehaviour
             if (debugLogging) Debug.Log("[GMDebug] All balls stopped - confirm/input unlocked for next shot.");
         };
 
+        // Phase 4: foul evaluation MUST run before Phase 3's state transitions below,
+        // since it needs to read targetState/currentTargetColour as they were BEFORE
+        // this shot (Phase 3's handler mutates them for the *next* shot).
+        OnAllBallsStopped += EvaluateFoul;
+
         // Phase 3: once a shot has fully settled, work out what got potted and apply
         // colour/scoring rules. Runs after the unlock above but order between the two
         // doesn't matter - they touch unrelated state.
@@ -85,24 +94,6 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning("GameManager: No CameraSwitching found in scene.", this);
 
         Debug.Log($"GameManager initialized: baseStrikeForce={baseStrikeForce} => GetStrikeForce()={GetStrikeForce()}");
-
-        EnsureColourNominationUi();
-    }
-
-    // Phase 5 UI is required after potting a red (section 5.1). Auto-attach once if missing.
-    private void EnsureColourNominationUi()
-    {
-        if (FindObjectOfType<ColourNominationUI>() != null) return;
-
-        var canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
-        {
-            Debug.LogWarning("GameManager: No Canvas found - add ColourNominationUI to a Canvas so players can nominate colours after potting a red.", this);
-            return;
-        }
-
-        canvas.gameObject.AddComponent<ColourNominationUI>();
-        if (debugLogging) Debug.Log("[GMDebug] ColourNominationUI auto-added to Canvas.");
     }
 
     public void Cam1() => cameraSwitching?.SwitchToTopDownCamera();
@@ -217,6 +208,7 @@ public class GameManager : MonoBehaviour
     {
         strikeRequested = true;
         PottedThisShot.Clear();
+        firstBallContacted = null; // Phase 4: fresh shot, no contact recorded yet
     }
     public void ClearStrikeRequest() => strikeRequested = false;
 
@@ -279,6 +271,20 @@ public class GameManager : MonoBehaviour
         OnBallPottedEvent?.Invoke(ball);
     }
 
+    // Called by CueBallContactTracker.cs (on the cue ball) the instant the cue ball
+    // physically hits another ball. Only the FIRST contact per shot is kept.
+    public void ReportCueBallContact(Rigidbody other)
+    {
+        if (firstBallContacted != null) return; // already recorded this shot's first contact
+        if (other == cueBall) return; // shouldn't happen, but guard anyway
+        firstBallContacted = other;
+        if (debugLogging)
+        {
+            var id = other.GetComponent<BallIdentity>();
+            Debug.Log($"[GMDebug] First contact this shot: {(id != null ? id.Type.ToString() : other.gameObject.name)}");
+        }
+    }
+
     // ======================================================================
     // ----- Phase 3: Colour Logic, Selection & Scoring (doc section 5) -----
     // ======================================================================
@@ -332,6 +338,7 @@ public class GameManager : MonoBehaviour
     // UI hooks (scoreboard, ball-on indicator - Phase 5 consumes these, doesn't produce them).
     public event Action<int, int> OnScoreChanged;          // (playerIndex, newScore)
     public event Action<TargetBallState, BallType?> OnTargetChanged; // (state, nominated/sequence colour)
+    public event Action<int> OnTurnChanged;                // (newCurrentPlayerIndex)
 
     // Called by the nomination UI when the player taps a colour while on Colour state.
     public void OnColourNominated(BallType chosen)
@@ -377,10 +384,11 @@ public class GameManager : MonoBehaviour
         OnScoreChanged?.Invoke(playerIndex, playerScores[playerIndex]);
     }
 
-    // Runs once per completed shot (subscribed to OnAllBallsStopped in Awake).
-    // NOTE: this is deliberately simple - it does not yet check whether the shot was
-    // LEGAL (wrong ball hit first, cue potted, etc). That's the Foul Table in Phase 4;
-    // this just applies section 5's colour/respawn/scoring rules to whatever was potted.
+    // Runs once per completed shot (subscribed to OnAllBallsStopped in Awake, AFTER EvaluateFoul).
+    // NOTE: scoring itself now lives entirely in EvaluateFoul (Phase 4) - this method only
+    // applies the PHYSICAL consequences of what was potted (respawn/permanent removal,
+    // targetState transitions), same as it always did. Awarding points here as well would
+    // double-count on top of EvaluateFoul's NoFoul()/Foul() results.
     private void EvaluateShotResult()
     {
         if (PottedThisShot.Count == 0) return; // nothing potted this shot - a miss, Phase 4's job
@@ -401,17 +409,16 @@ public class GameManager : MonoBehaviour
             {
                 if (targetState == TargetBallState.Red)
                 {
-                    AwardPoints(currentPlayerIndex, BallValue[BallType.Red]);
                     targetState = TargetBallState.Colour;
                     currentTargetColour = null; // must be nominated before next shot (or auto-set if reds now gone)
                     OnTargetChanged?.Invoke(targetState, currentTargetColour);
                 }
-                else
-                {
-                    // Red potted while target was Colour - illegal in real snooker.
-                    // Left for Phase 4's foul table to actually penalize; just flagging here.
-                    Debug.LogWarning("[GMDebug] Red potted while on Colour - Phase 4 foul table will need to handle this.");
-                }
+                // NOTE (known gap, flagged rather than solved here): if this red pot was actually
+                // part of a FOUL shot (e.g. cue ball hit a colour first, then also potted a red),
+                // this still flips targetState to Colour, which isn't strictly correct - the
+                // opponent should arguably still be "on Red" after a foul. EvaluateFoul already
+                // scores this correctly either way; only this state-transition edge case remains.
+                // Revisit if it matters for your rules strictness.
             }
             else
             {
@@ -420,11 +427,9 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // 5.3 Respawn logic.
+    // 5.3 Respawn logic (physical placement only - scoring now lives in EvaluateFoul).
     private void ResolveColourPot(BallIdentity identity, Rigidbody colourBall)
     {
-        AwardPoints(currentPlayerIndex, BallValue[identity.Type]);
-
         if (RedsRemainingOnTable() > 0)
         {
             // [Assumed, polish item] Spot-conflict rule (real snooker: nearest available spot
@@ -464,6 +469,163 @@ public class GameManager : MonoBehaviour
         {
             currentTargetColour = null;
             Debug.Log("[GMDebug] Colour sequence complete - frame finished. (End-of-frame handling: Phase 7.)");
+        }
+    }
+
+    // ======================================================================
+    // ----- Phase 4: Foul Logic (doc section 6) -----
+    // ======================================================================
+    //
+    // Single EvaluateFoul() function driving everything off the decision tables in 6.2/6.3,
+    // exactly as the doc recommends over scattered if/else. This is the ONLY place that
+    // awards points and passes turns - Phase 3's EvaluateShotResult (above) only handles
+    // the physical respawn/removal side now.
+    //
+    // Runs BEFORE EvaluateShotResult (see subscription order in Awake) specifically so it
+    // reads targetState/currentTargetColour as they were going INTO this shot.
+
+    private int OpponentIndex => (currentPlayerIndex + 1) % playerScores.Length;
+
+    private void PassTurn()
+    {
+        currentPlayerIndex = OpponentIndex;
+        if (debugLogging) Debug.Log($"[GMDebug] Turn passed - now Player {currentPlayerIndex}");
+        OnTurnChanged?.Invoke(currentPlayerIndex);
+    }
+
+    private BallType? GetBallType(Rigidbody rb)
+    {
+        if (rb == null) return null;
+        var id = rb.GetComponent<BallIdentity>();
+        return id != null ? id.Type : (BallType?)null;
+    }
+
+    // Any ball OTHER than a red (and other than the cue ball) potted this shot.
+    private bool AnyNonRedPottedThisShot()
+    {
+        foreach (var b in PottedThisShot)
+        {
+            if (b == cueBall) continue;
+            var type = GetBallType(b);
+            if (type.HasValue && type.Value != BallType.Red) return true;
+        }
+        return false;
+    }
+
+    // Highest BallValue among illegally-potted (non-red, non-cue) balls this shot.
+    // Cue ball is deliberately excluded here - its foul is always floored to 4 by the
+    // Math.Max(4, ...) callers regardless of this value.
+    private int HighestValuePottedIllegally()
+    {
+        int highest = 0;
+        foreach (var b in PottedThisShot)
+        {
+            if (b == cueBall) continue;
+            var type = GetBallType(b);
+            if (!type.HasValue || type.Value == BallType.Red) continue;
+            if (BallValue.TryGetValue(type.Value, out int v)) highest = Mathf.Max(highest, v);
+        }
+        return highest;
+    }
+
+    // 6.1-6.4: single end-of-shot foul decision, run once per completed shot.
+    private void EvaluateFoul()
+    {
+        bool cueBallPotted = cueBall != null && PottedThisShot.Contains(cueBall);
+        BallType? firstType = GetBallType(firstBallContacted);
+
+        bool legal;
+        int points;
+
+        if (targetState == TargetBallState.Red)
+        {
+            // 6.2 - Player On Red
+            if (cueBallPotted || firstBallContacted == null)
+            {
+                legal = false;
+                points = Mathf.Max(4, BallValue[BallType.Red]); // 6.5: potting cue ball / hitting nothing
+            }
+            else if (firstType != BallType.Red)
+            {
+                legal = false;
+                points = Mathf.Max(4, BallValue[firstType.Value]);
+            }
+            else if (AnyNonRedPottedThisShot())
+            {
+                legal = false;
+                points = Mathf.Max(4, HighestValuePottedIllegally());
+            }
+            else
+            {
+                legal = true;
+                int redsPotted = 0;
+                foreach (var b in PottedThisShot)
+                {
+                    var t = GetBallType(b);
+                    if (t.HasValue && t.Value == BallType.Red) redsPotted++;
+                }
+                points = redsPotted * BallValue[BallType.Red];
+            }
+        }
+        else
+        {
+            // 6.3 - Player On Colour
+            if (!currentTargetColour.HasValue)
+            {
+                // Shouldn't normally happen (ConfirmButtonPressed blocks striking without a
+                // nomination), but guard against it rather than throwing on a missing key.
+                Debug.LogWarning("[GMDebug] EvaluateFoul: on Colour with no currentTargetColour - skipping foul check.");
+                return;
+            }
+
+            BallType target = currentTargetColour.Value;
+
+            if (cueBallPotted || firstBallContacted == null)
+            {
+                legal = false;
+                points = Mathf.Max(4, BallValue[target]);
+            }
+            else if (firstType != target)
+            {
+                legal = false;
+                points = Mathf.Max(4, BallValue[firstType.Value]);
+            }
+            else if (PottedThisShot.Count == 1 && GetBallType(PottedThisShot[0]) == target)
+            {
+                legal = true;
+                points = BallValue[target];
+            }
+            else
+            {
+                // Correct ball hit, but wrong pot outcome (potted something else / nothing /
+                // potted the target plus something extra) - still a foul.
+                legal = false;
+                points = Mathf.Max(4, BallValue[target]);
+            }
+        }
+
+        // 6.4 - apply the result.
+        if (legal)
+        {
+            if (points > 0)
+            {
+                AwardPoints(currentPlayerIndex, points);
+                // Legal pot - same player continues, no turn pass.
+            }
+            else
+            {
+                // Legal shot, nothing potted (a plain miss) - [Assumed] turn passes, matching
+                // standard snooker even though the doc's Phase 4 only explicitly specifies
+                // "turn passes after a foul". Flag/adjust here if you want different behaviour.
+                PassTurn();
+            }
+        }
+        else
+        {
+            AwardPoints(OpponentIndex, points);
+            PassTurn();
+
+            if (debugLogging) Debug.Log($"[GMDebug] FOUL: {points} pts to Player {OpponentIndex}.");
         }
     }
 }
