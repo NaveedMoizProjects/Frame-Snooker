@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEditorInternal;
 using UnityEngine;
 
 public class GameManager : MonoBehaviour
@@ -86,6 +85,24 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning("GameManager: No CameraSwitching found in scene.", this);
 
         Debug.Log($"GameManager initialized: baseStrikeForce={baseStrikeForce} => GetStrikeForce()={GetStrikeForce()}");
+
+        EnsureColourNominationUi();
+    }
+
+    // Phase 5 UI is required after potting a red (section 5.1). Auto-attach once if missing.
+    private void EnsureColourNominationUi()
+    {
+        if (FindObjectOfType<ColourNominationUI>() != null) return;
+
+        var canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            Debug.LogWarning("GameManager: No Canvas found - add ColourNominationUI to a Canvas so players can nominate colours after potting a red.", this);
+            return;
+        }
+
+        canvas.gameObject.AddComponent<ColourNominationUI>();
+        if (debugLogging) Debug.Log("[GMDebug] ColourNominationUI auto-added to Canvas.");
     }
 
     public void Cam1() => cameraSwitching?.SwitchToTopDownCamera();
