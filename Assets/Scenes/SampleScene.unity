@@ -334,10 +334,15 @@ MonoBehaviour:
   - {fileID: 9058860819765953564}
   - {fileID: 9141776648640768738}
   - {fileID: 7746203734043623106}
+  cueBall: {fileID: 0}
+  cueBallRespawnPoint: {fileID: 0}
   baseStrikeForce: 8
   moveThreshold: 0.01
   snapToZeroThreshold: 0.09
   debugLogging: 1
+  targetState: 0
+  playerScores: 0000000000000000
+  currentPlayerIndex: 0
 --- !u!4 &14154112
 Transform:
   m_ObjectHideFlags: 0
@@ -633,6 +638,7 @@ GameObject:
   - component: {fileID: 186814547}
   - component: {fileID: 186814546}
   - component: {fileID: 186814545}
+  - component: {fileID: 186814548}
   m_Layer: 8
   m_Name: p1 (2)
   m_TagString: Untagged
@@ -649,7 +655,7 @@ Transform:
   m_GameObject: {fileID: 186814543}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 4.754, y: 3.509, z: 8.272}
+  m_LocalPosition: {x: 4.754, y: 3.69, z: 8.272}
   m_LocalScale: {x: 0.80555, y: 0.80555, z: 0.80555}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -683,7 +689,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 186814543}
-  m_Enabled: 0
+  m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -726,6 +732,18 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 186814543}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &186814548
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 186814543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &199915550
 GameObject:
   m_ObjectHideFlags: 0
@@ -952,6 +970,7 @@ GameObject:
   - component: {fileID: 397775894}
   - component: {fileID: 397775893}
   - component: {fileID: 397775892}
+  - component: {fileID: 397775895}
   m_Layer: 8
   m_Name: p1 (1)
   m_TagString: Untagged
@@ -968,7 +987,7 @@ Transform:
   m_GameObject: {fileID: 397775890}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 4.7, y: 3.509, z: -8.301}
+  m_LocalPosition: {x: 4.7, y: 3.69, z: -8.301}
   m_LocalScale: {x: 0.80555, y: 0.80555, z: 0.80555}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1002,7 +1021,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 397775890}
-  m_Enabled: 0
+  m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -1045,6 +1064,18 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 397775890}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &397775895
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 397775890}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &414624474
 GameObject:
   m_ObjectHideFlags: 0
@@ -1259,6 +1290,7 @@ GameObject:
   - component: {fileID: 659154087}
   - component: {fileID: 659154086}
   - component: {fileID: 659154085}
+  - component: {fileID: 659154088}
   m_Layer: 8
   m_Name: p1 (5)
   m_TagString: Untagged
@@ -1275,7 +1307,7 @@ Transform:
   m_GameObject: {fileID: 659154083}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -4.798, y: 3.509, z: -8.301}
+  m_LocalPosition: {x: -4.798, y: 3.69, z: -8.301}
   m_LocalScale: {x: 0.80555, y: 0.80555, z: 0.80555}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1309,7 +1341,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 659154083}
-  m_Enabled: 0
+  m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -1352,6 +1384,18 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 659154083}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &659154088
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 659154083}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &666870322
 GameObject:
   m_ObjectHideFlags: 0
@@ -1683,6 +1727,37 @@ MonoBehaviour:
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 0
+--- !u!1 &706661222
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 706661223}
+  m_Layer: 6
+  m_Name: respawn cueball
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &706661223
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 706661222}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0.7071068, y: -0, z: -0, w: 0.7071067}
+  m_LocalPosition: {x: 0.7, y: 3.8054485, z: 4.5970154}
+  m_LocalScale: {x: 14.766923, y: 14.766923, z: 14.766923}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 543450652906160203}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &714475303
 GameObject:
   m_ObjectHideFlags: 3
@@ -1821,12 +1896,12 @@ MonoBehaviour:
   applySpinTorque: 1
   aimLineCue: {fileID: 322264290}
   aimLineObject: {fileID: 1221921396}
-  maxDistance: 25
-  maxNoHitLength: 8
-  maxReflectionBounces: 3
+  maxDistance: 10
+  maxNoHitLength: 6
+  maxReflectionBounces: 4
   reflectionEpsilon: 0.02
   ghostBallPrefab: {fileID: 4859117898261897200, guid: c4edfd66c77bdcd4c9542a82dfb192c4, type: 3}
-  contactStubLength: 5
+  contactStubLength: 3
   ballLayer:
     serializedVersion: 2
     m_Bits: 64
@@ -2820,6 +2895,7 @@ GameObject:
   - component: {fileID: 1304496872}
   - component: {fileID: 1304496871}
   - component: {fileID: 1304496870}
+  - component: {fileID: 1304496873}
   m_Layer: 8
   m_Name: p1 (4)
   m_TagString: Untagged
@@ -2836,7 +2912,7 @@ Transform:
   m_GameObject: {fileID: 1304496868}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -4.73, y: 3.554, z: 8.283}
+  m_LocalPosition: {x: -4.73, y: 3.735, z: 8.283}
   m_LocalScale: {x: 0.80555, y: 0.80555, z: 0.80555}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2870,7 +2946,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1304496868}
-  m_Enabled: 0
+  m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -2913,6 +2989,18 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1304496868}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1304496873
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1304496868}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1331425080
 GameObject:
   m_ObjectHideFlags: 0
@@ -3164,6 +3252,7 @@ GameObject:
   - component: {fileID: 1485315082}
   - component: {fileID: 1485315081}
   - component: {fileID: 1485315080}
+  - component: {fileID: 1485315083}
   m_Layer: 8
   m_Name: p1
   m_TagString: Untagged
@@ -3180,7 +3269,7 @@ Transform:
   m_GameObject: {fileID: 1485315078}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 4.801, y: 3.509, z: 0}
+  m_LocalPosition: {x: 4.801, y: 3.69, z: 0}
   m_LocalScale: {x: 0.80555, y: 0.80555, z: 0.80555}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3214,7 +3303,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1485315078}
-  m_Enabled: 0
+  m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -3257,6 +3346,18 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1485315078}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1485315083
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1485315078}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1530018202
 GameObject:
   m_ObjectHideFlags: 0
@@ -3310,10 +3411,15 @@ MonoBehaviour:
   - {fileID: 9058860819765953564}
   - {fileID: 9141776648640768738}
   - {fileID: 7746203734043623106}
-  baseStrikeForce: 8
+  cueBall: {fileID: 7746203734043623106}
+  cueBallRespawnPoint: {fileID: 706661223}
+  baseStrikeForce: 30
   moveThreshold: 0.01
   snapToZeroThreshold: 0.09
   debugLogging: 1
+  targetState: 0
+  playerScores: 0000000000000000
+  currentPlayerIndex: 0
 --- !u!4 &1530018204
 Transform:
   m_ObjectHideFlags: 0
@@ -3672,6 +3778,7 @@ GameObject:
   - component: {fileID: 1663439224}
   - component: {fileID: 1663439223}
   - component: {fileID: 1663439222}
+  - component: {fileID: 1663439225}
   m_Layer: 8
   m_Name: p1 (3)
   m_TagString: Untagged
@@ -3688,7 +3795,7 @@ Transform:
   m_GameObject: {fileID: 1663439220}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -4.793, y: 3.509, z: 0}
+  m_LocalPosition: {x: -4.793, y: 3.69, z: 0}
   m_LocalScale: {x: 0.80555, y: 0.80555, z: 0.80555}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3722,7 +3829,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1663439220}
-  m_Enabled: 0
+  m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
@@ -3765,6 +3872,18 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1663439220}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!114 &1663439225
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1663439220}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1668884747
 GameObject:
   m_ObjectHideFlags: 0
@@ -5255,6 +5374,7 @@ Transform:
   - {fileID: 3745622627529530158}
   - {fileID: 199915551}
   - {fileID: 5949365508272798797}
+  - {fileID: 706661223}
   - {fileID: 6269235725840800617}
   - {fileID: 1239827817188221328}
   - {fileID: 4859274359930400890}
@@ -5441,6 +5561,7 @@ GameObject:
   - component: {fileID: 8275023552318025896}
   - component: {fileID: 8275023552318025898}
   - component: {fileID: 8275023552318025899}
+  - component: {fileID: 8275023552318025900}
   m_Layer: 6
   m_Name: Redball#10
   m_TagString: Untagged
@@ -5583,6 +5704,7 @@ GameObject:
   - component: {fileID: 2559163081564191121}
   - component: {fileID: 7941754292419554483}
   - component: {fileID: 7941754292419554484}
+  - component: {fileID: 7941754292419554485}
   m_Layer: 6
   m_Name: Yellow.001
   m_TagString: Untagged
@@ -5777,6 +5899,7 @@ GameObject:
   - component: {fileID: 327460983269374503}
   - component: {fileID: 6188032715436228963}
   - component: {fileID: 6188032715436228964}
+  - component: {fileID: 6188032715436228965}
   m_Layer: 6
   m_Name: Green.001
   m_TagString: Untagged
@@ -6066,6 +6189,7 @@ GameObject:
   - component: {fileID: 5276919274985414394}
   - component: {fileID: 5276919274985414395}
   - component: {fileID: 5276919274985414396}
+  - component: {fileID: 5276919274985414397}
   m_Layer: 6
   m_Name: Pink
   m_TagString: Untagged
@@ -6221,6 +6345,7 @@ GameObject:
   - component: {fileID: 6722896882280793642}
   - component: {fileID: 7222480145985274047}
   - component: {fileID: 7222480145985274048}
+  - component: {fileID: 7222480145985274049}
   m_Layer: 6
   m_Name: Redball#11
   m_TagString: Untagged
@@ -6429,6 +6554,7 @@ GameObject:
   - component: {fileID: 6600849723321759144}
   - component: {fileID: 6600849723321759146}
   - component: {fileID: 6600849723321759147}
+  - component: {fileID: 6600849723321759148}
   m_Layer: 6
   m_Name: Redball#8
   m_TagString: Untagged
@@ -6549,6 +6675,7 @@ GameObject:
   - component: {fileID: 1259105138317226580}
   - component: {fileID: 9217609629084197460}
   - component: {fileID: 9217609629084197461}
+  - component: {fileID: 9217609629084197462}
   m_Layer: 6
   m_Name: Redball#7
   m_TagString: Untagged
@@ -6569,6 +6696,7 @@ GameObject:
   - component: {fileID: 4119977125503707355}
   - component: {fileID: 8945587582707050661}
   - component: {fileID: 8945587582707050662}
+  - component: {fileID: 8945587582707050663}
   m_Layer: 6
   m_Name: Redball#4
   m_TagString: Untagged
@@ -7303,6 +7431,7 @@ GameObject:
   - component: {fileID: 7239046383713040428}
   - component: {fileID: 7239046383713040429}
   - component: {fileID: 7239046383713040430}
+  - component: {fileID: 7239046383713040431}
   m_Layer: 6
   m_Name: Blue.001
   m_TagString: Untagged
@@ -7447,6 +7576,7 @@ GameObject:
   - component: {fileID: 8050144640082252439}
   - component: {fileID: 8050144640082252441}
   - component: {fileID: 8050144640082252442}
+  - component: {fileID: 8050144640082252443}
   m_Layer: 6
   m_Name: Redball#9
   m_TagString: Untagged
@@ -7628,6 +7758,21 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 2
+--- !u!114 &5276919274985414397
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2044782592330251642}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 6
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!33 &5334037120158625200
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -7762,6 +7907,7 @@ GameObject:
   - component: {fileID: 1682989499874524907}
   - component: {fileID: 7550895774281355913}
   - component: {fileID: 7550895774281355914}
+  - component: {fileID: 7550895774281355915}
   m_Layer: 6
   m_Name: Redball#6
   m_TagString: Untagged
@@ -7782,6 +7928,7 @@ GameObject:
   - component: {fileID: 1276897724318602827}
   - component: {fileID: 7908255254769287567}
   - component: {fileID: 7908255254769287568}
+  - component: {fileID: 7908255254769287569}
   m_Layer: 6
   m_Name: Redball#12
   m_TagString: Untagged
@@ -7853,6 +8000,7 @@ GameObject:
   - component: {fileID: 597711553711645629}
   - component: {fileID: 7617698469631835354}
   - component: {fileID: 7617698469631835355}
+  - component: {fileID: 7617698469631835356}
   m_Layer: 6
   m_Name: Redball#14
   m_TagString: Untagged
@@ -7924,6 +8072,21 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 2
+--- !u!114 &6188032715436228965
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1415506560718014681}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 3
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!33 &6228499314381835128
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -8156,6 +8319,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &6600849723321759148
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3040804591689612235}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!33 &6607394008697594140
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -8444,6 +8622,7 @@ GameObject:
   - component: {fileID: 7426341556223467783}
   - component: {fileID: 7905080081168398928}
   - component: {fileID: 7905080081168398929}
+  - component: {fileID: 7905080081168398930}
   m_Layer: 6
   m_Name: Redball#5
   m_TagString: Untagged
@@ -8483,6 +8662,7 @@ GameObject:
   - component: {fileID: 2251927106693660041}
   - component: {fileID: 9141776648640768737}
   - component: {fileID: 9141776648640768738}
+  - component: {fileID: 9141776648640768739}
   m_Layer: 6
   m_Name: Brown
   m_TagString: Untagged
@@ -8610,6 +8790,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &7222480145985274049
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2325878736198410446}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!23 &7239046383713040428
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -8700,6 +8895,21 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 2
+--- !u!114 &7239046383713040431
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4688720997079505047}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 5
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!1001 &7279758915575683111
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -8770,6 +8980,7 @@ GameObject:
   - component: {fileID: 7143390936155966412}
   - component: {fileID: 7811770767469774955}
   - component: {fileID: 7811770767469774956}
+  - component: {fileID: 7811770767469774957}
   m_Layer: 6
   m_Name: Redball#15
   m_TagString: Untagged
@@ -8916,6 +9127,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &7550895774281355915
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5980502428874800612}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!33 &7552268718199132709
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -8987,6 +9213,7 @@ GameObject:
   - component: {fileID: 7581102834631203562}
   - component: {fileID: 7581102834631203564}
   - component: {fileID: 7581102834631203565}
+  - component: {fileID: 7581102834631203566}
   m_Layer: 6
   m_Name: Redball#1
   m_TagString: Untagged
@@ -9084,6 +9311,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &7581102834631203566
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7567153063492263937}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!1 &7588692207651007304
 GameObject:
   m_ObjectHideFlags: 0
@@ -9166,6 +9408,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &7617698469631835356
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6161760388225093447}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!33 &7646909206351962335
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -9375,6 +9632,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &7811770767469774957
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7301888196167532109}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!23 &7896135553845744284
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -9480,6 +9752,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &7905080081168398930
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7007848849686791752}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!33 &7908255254769287565
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -9536,6 +9823,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &7908255254769287569
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5995909684821387421}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!4 &7914859602498413986
 Transform:
   m_ObjectHideFlags: 0
@@ -9636,6 +9938,21 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 2
+--- !u!114 &7941754292419554485
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1197555724706266540}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 2
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!33 &8035971678769017176
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -9742,6 +10059,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &8050144640082252443
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4997304371689250781}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!23 &8062970486053142772
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -9903,6 +10235,7 @@ GameObject:
   - component: {fileID: 1790480825694346208}
   - component: {fileID: 8191827091088309063}
   - component: {fileID: 8191827091088309064}
+  - component: {fileID: 8191827091088309065}
   m_Layer: 6
   m_Name: Redball#2
   m_TagString: Untagged
@@ -9958,6 +10291,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &8191827091088309065
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8191827091088309061}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!4 &8232965660642985854
 Transform:
   m_ObjectHideFlags: 0
@@ -10063,6 +10411,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &8275023552318025900
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 862467689556068616}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!33 &8389933042890506920
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -10092,6 +10455,7 @@ GameObject:
   - component: {fileID: 1209995723732000933}
   - component: {fileID: 9058860819765953563}
   - component: {fileID: 9058860819765953564}
+  - component: {fileID: 9058860819765953565}
   m_Layer: 6
   m_Name: Black
   m_TagString: Untagged
@@ -10153,6 +10517,7 @@ GameObject:
   - component: {fileID: 8832738866679147718}
   - component: {fileID: 8832738866679147720}
   - component: {fileID: 8832738866679147721}
+  - component: {fileID: 8832738866679147722}
   m_Layer: 6
   m_Name: Redball#13
   m_TagString: Untagged
@@ -10288,6 +10653,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &8832738866679147722
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8656788570332413964}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!33 &8897240366538178330
 MeshFilter:
   m_ObjectHideFlags: 0
@@ -10359,6 +10739,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &8945587582707050663
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3231028509968328841}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!1 &9014776605245948979
 GameObject:
   m_ObjectHideFlags: 0
@@ -10472,6 +10867,7 @@ GameObject:
   - component: {fileID: 3164402369135894799}
   - component: {fileID: 9048647032685329231}
   - component: {fileID: 9048647032685329232}
+  - component: {fileID: 9048647032685329233}
   m_Layer: 6
   m_Name: Redball#3
   m_TagString: Untagged
@@ -10527,6 +10923,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &9048647032685329233
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9048647032685329229}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!1 &9051868677569638184
 GameObject:
   m_ObjectHideFlags: 0
@@ -10631,6 +11042,21 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 2
+--- !u!114 &9058860819765953565
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8498059336563723958}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 7
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!4 &9060396692849013449
 Transform:
   m_ObjectHideFlags: 0
@@ -10709,6 +11135,21 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 2
+--- !u!114 &9141776648640768739
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7071822967583266607}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 4
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!23 &9169422610028097504
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -10828,6 +11269,21 @@ SphereCollider:
   serializedVersion: 3
   m_Radius: 0.009999998
   m_Center: {x: 0, y: 0, z: 0}
+--- !u!114 &9217609629084197462
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3207014409230793414}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: efe48d54d8428414fbc22742efda0a1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballType: 1
+  useManualSpawnPosition: 0
+  manualSpawnPosition: {x: 0, y: 0, z: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

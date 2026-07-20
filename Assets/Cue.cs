@@ -216,10 +216,15 @@ public class Cue : MonoBehaviour
                     // Position at the exact point of impact
                     currentGhostBall.transform.position = ghostBallCenter;
                 }
+
+                // Direction the OBJECT ball will travel: along the line connecting the two
+                // ball centers at contact (computed once here so both the red object-line and
+                // the white cue-deflection stub below can use the same value).
+                Vector3 objDir = Flat(-ballHit.normal);
+
                 // Changes Second line which is red
                 if (aimLineObject)
                 {
-                    Vector3 objDir = Flat(-ballHit.normal);
                     float stubLen = Mathf.Max(0.01f, contactStubLength);
 
                     // default end point if no cushion between contact and stubLen
@@ -240,6 +245,32 @@ public class Cue : MonoBehaviour
                     aimLineObject.SetPosition(0, contact);
                     aimLineObject.SetPosition(1, bPt);
                 }
+
+                // NEW: direction the CUE ball deflects to after contact (perpendicular to the
+                // object-ball direction, standard equal-mass elastic collision "throw-off" line).
+                // This is what was missing - previously aimPoints stopped exactly at contact,
+                // so the white line never showed where the cue ball goes after the hit.
+                Vector3 cueDirAfter = Flat(currentDir - Vector3.Project(currentDir, objDir));
+                if (cueDirAfter != Vector3.zero)
+                {
+                    float cueStubLen = Mathf.Max(0.01f, contactStubLength);
+
+                    Vector3 cueStubOrigin = contact + cueDirAfter * 0.01f;
+                    cueStubOrigin.y = tableY;
+
+                    RaycastHit cueStubHit;
+                    bool cueHitCushion = Physics.Raycast(cueStubOrigin, cueDirAfter, out cueStubHit, cueStubLen, tableLayer, QueryTriggerInteraction.Collide);
+
+                    Vector3 cueEnd = cueHitCushion
+                        ? new Vector3(cueStubHit.point.x, tableY, cueStubHit.point.z)
+                        : contact + cueDirAfter * cueStubLen;
+                    cueEnd.y = tableY;
+
+                    aimPoints.Add(cueEnd);
+                }
+                // NOTE: for a near dead-center hit, objDir ends up almost parallel to currentDir,
+                // so cueDirAfter naturally comes out very short/zero - that's correct "stun shot"
+                // physics (cue ball stops), not a bug. The stub will just be tiny/invisible then.
 
                 // finished prediction
                 break;
@@ -362,7 +393,7 @@ public class Cue : MonoBehaviour
 
         // clear requests/confirm after applying
         gameManager.ClearStrikeRequest();
-       // gameManager.ClearConfirmMode();
+        // gameManager.ClearConfirmMode();
     }
 
     // Calculate force direction with angle offsets
