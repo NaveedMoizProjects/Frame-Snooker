@@ -592,11 +592,10 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            // 6.3 - Player On Colour
+
             if (!currentTargetColour.HasValue)
             {
-                // Shouldn't normally happen (ConfirmButtonPressed blocks striking without a
-                // nomination), but guard against it rather than throwing on a missing key.
+
                 Debug.LogWarning("[GMDebug] EvaluateFoul: on Colour with no currentTargetColour - skipping foul check.");
                 return;
             }
@@ -620,8 +619,7 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-                // Correct ball hit, but wrong pot outcome (potted something else / nothing /
-                // potted the target plus something extra) - still a foul.
+
                 legal = false;
                 points = Mathf.Max(4, BallValue[target]);
             }
@@ -633,13 +631,11 @@ public class GameManager : MonoBehaviour
             if (points > 0)
             {
                 AwardPoints(currentPlayerIndex, points);
-                // Legal pot - same player continues, no turn pass.
+
             }
             else
             {
-                // Legal shot, nothing potted (a plain miss) - [Assumed] turn passes, matching
-                // standard snooker even though the doc's Phase 4 only explicitly specifies
-                // "turn passes after a foul". Flag/adjust here if you want different behaviour.
+               
                 PassTurn();
             }
         }
