@@ -399,7 +399,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8e4d1a2765340c9b2f6e803d8a91547, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  colour: 6
+  colour: 2
 --- !u!1 &36637999
 GameObject:
   m_ObjectHideFlags: 0
@@ -3704,7 +3704,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8e4d1a2765340c9b2f6e803d8a91547, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  colour: 3
+  colour: 2
 --- !u!1 &1150436686
 GameObject:
   m_ObjectHideFlags: 0
@@ -4081,7 +4081,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8e4d1a2765340c9b2f6e803d8a91547, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  colour: 7
+  colour: 2
 --- !u!1 &1221921395
 GameObject:
   m_ObjectHideFlags: 0
@@ -5073,6 +5073,7 @@ MonoBehaviour:
   snapToZeroThreshold: 0.09
   debugLogging: 1
   targetState: 0
+  colourNominationPanel: {fileID: 0}
   playerScores: 0000000000000000
   currentPlayerIndex: 0
 --- !u!4 &1530018204
@@ -5402,9 +5403,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 1654029427}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8cd5b855eaf14a54c894a19c8a9b94f6, type: 3}
+  m_Script: {fileID: 11500000, guid: 635ace60d42d0724b9af2ac1ad7a7c10, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  gameManager: {fileID: 1530018203}
+  buildUiAtRuntime: 1
+  nominationPanel: {fileID: 748295480}
+  statusLabel: {fileID: 1694118619}
 --- !u!114 &1654029433
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5417,7 +5422,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 256ff885f7678ea458f32c8adafec876, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  gameManager: {fileID: 0}
+  gameManager: {fileID: 1530018203}
   player1Label: {fileID: 1399722882}
   player2Label: {fileID: 591863437}
   activeColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
@@ -7678,7 +7683,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8e4d1a2765340c9b2f6e803d8a91547, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  colour: 4
+  colour: 2
 --- !u!1 &2027761440
 GameObject:
   m_ObjectHideFlags: 0
@@ -7880,7 +7885,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8e4d1a2765340c9b2f6e803d8a91547, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  colour: 5
+  colour: 2
 --- !u!33 &32031974282823754
 MeshFilter:
   m_ObjectHideFlags: 0

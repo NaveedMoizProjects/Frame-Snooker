@@ -85,6 +85,11 @@ public class GameManager : MonoBehaviour
         // colour/scoring rules. Runs after the unlock above but order between the two
         // doesn't matter - they touch unrelated state.
         OnAllBallsStopped += EvaluateShotResult;
+
+        // Phase 5: keep the manually-built nomination panel in sync with game state.
+        // This replaces ColourNominationUI entirely - GameManager just toggles the panel
+        // GameObject directly, no separate UI script involved.
+        OnTargetChanged += (state, colour) => RefreshColourNominationPanel();
     }
 
     void Start()
@@ -95,24 +100,17 @@ public class GameManager : MonoBehaviour
 
         Debug.Log($"GameManager initialized: baseStrikeForce={baseStrikeForce} => GetStrikeForce()={GetStrikeForce()}");
 
-       // EnsureColourNominationUi();
+        // Set correct initial visibility (starts hidden, since targetState starts on Red).
+        RefreshColourNominationPanel();
     }
 
-    // Phase 5 UI is required after potting a red (section 5.1). Auto-attach once if missing.
-    //private void EnsureColourNominationUi()
-    //{
-    //    //if (FindObjectOfType<ColourNominationUI>() != null) return;
-
-    //    var canvas = FindObjectOfType<Canvas>();
-    //    if (canvas == null)
-    //    {
-    //        Debug.LogWarning("GameManager: No Canvas found - add ColourNominationUI to a Canvas so players can nominate colours after potting a red.", this);
-    //        return;
-    //    }
-
-    //  //  canvas.gameObject.AddComponent<ColourNominationUI>();
-    //    if (debugLogging) Debug.Log("[GMDebug] ColourNominationUI auto-added to Canvas.");
-    //}
+    // Shows the manually-built panel exactly when NeedsColourNomination is true, hides it
+    // otherwise. Called from Awake's OnTargetChanged subscription and once at Start.
+    private void RefreshColourNominationPanel()
+    {
+        if (colourNominationPanel != null)
+            colourNominationPanel.SetActive(NeedsColourNomination);
+    }
 
     public void Cam1() => cameraSwitching?.SwitchToTopDownCamera();
     public void Cam2() => cameraSwitching?.SwitchToThirdPersonCamera();
@@ -198,15 +196,18 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        // NOTE: Confirm no longer fires the strike itself. It only locks aim so the
+        // ShotPowerSlider becomes interactable - the actual strike happens when the
+        // player releases the power slider (see ShotPowerSlider.OnPointerUp).
         if (!confirmMode)
         {
             confirmMode = true;
             inputLocked = true;
-            Debug.Log("Confirm pressed: aim locked. Pull the power slider and release to shoot.");
+            Debug.Log("Confirm pressed: input locked. Use the power slider to set power and release to strike.");
         }
         else
         {
-            Debug.Log("Already aiming - release the power slider to take the shot.");
+            Debug.Log("Already in confirm mode - use the power slider to strike, or press Clear to cancel.");
         }
     }
 
@@ -312,10 +313,15 @@ public class GameManager : MonoBehaviour
     [Tooltip("Starts on Red per 5.1 (assumes reds remain on table at frame start).")]
     [SerializeField] private TargetBallState targetState = TargetBallState.Red;
 
-    // Set by the nomination UI (OnColourNominated). Only meaningful while
-    // targetState == Colour AND reds remain on table - once reds run out the
-    // sequence below drives currentTargetColour automatically, no nomination needed.
+    // Set by the nomination buttons (OnColourNominated, via ColourNominateButton). Only
+    // meaningful while targetState == Colour AND reds remain on table - once reds run out
+    // the sequence below drives currentTargetColour automatically, no nomination needed.
     private BallType? currentTargetColour = null;
+
+    [Header("Phase 5 - Colour Nomination Panel (manual - no ColourNominationUI script)")]
+    [Tooltip("Drag your manually-built ColourSlectionPanel here. GameManager shows/hides it " +
+             "based on NeedsColourNomination - nothing else needs to control it.")]
+    [SerializeField] private GameObject colourNominationPanel;
 
     public TargetBallState CurrentTargetState => targetState;
     public BallType? CurrentTargetColour => currentTargetColour;
