@@ -123,7 +123,7 @@ public class Cue : MonoBehaviour
             if (debugLogTimer > 0.5f)
             {
                 debugLogTimer = 0f;
-                Debug.Log($"[CueDebug] confirmMode={confirmed} | nextplay={gameManager.isNextPlay()} | strikeForce={gameManager.GetStrikeForce()} | forceMul={forceMultiplier} | angle={angleOffsetDegrees}°");
+                Debug.Log($"[CueDebug] confirmMode={confirmed} | nextplay={gameManager.isNextPlay()} | strikeForce={gameManager.GetStrikeForce()} | forceMul={forceMultiplier} | angle={angleOffsetDegrees}ï¿½");
             }
         }
 
@@ -169,7 +169,13 @@ public class Cue : MonoBehaviour
 
         float tableY = Cueball.transform.position.y;
         Vector3 origin = Cueball.transform.position + Vector3.up * 0.01f;
-        Vector3 dir = Flat(Cueball.transform.position - cuestickref.transform.position);
+        // Predict from the same spin-adjusted direction ApplyForceToCueBall will actually strike
+        // along, so dialling in English visibly swings the aim line instead of the drawn line and
+        // the real shot silently disagreeing. Flattening afterwards drops the draw/follow tilt,
+        // which doesn't change the initial horizontal path anyway.
+        Vector3 rawDir = Cueball.transform.position - cuestickref.transform.position;
+        if (rawDir.sqrMagnitude < 1e-6f) return;
+        Vector3 dir = Flat(CalculateForceDirection(rawDir.normalized));
         if (dir == Vector3.zero) return;
 
         aimPoints.Clear();
@@ -389,7 +395,7 @@ public class Cue : MonoBehaviour
             }
         }
 
-        Debug.Log($"[Cue Strike] Impulse={finalForceMagnitude:F2} | Angle={angleOffsetDegrees}° | Vertical={verticalAngleDegrees}° | Direction={forceDirection} | postVel={cueballRigidbody.velocity}", this);
+        Debug.Log($"[Cue Strike] Impulse={finalForceMagnitude:F2} | Angle={angleOffsetDegrees}ï¿½ | Vertical={verticalAngleDegrees}ï¿½ | Direction={forceDirection} | postVel={cueballRigidbody.velocity}", this);
 
         // clear requests/confirm after applying
         gameManager.ClearStrikeRequest();
@@ -399,10 +405,10 @@ public class Cue : MonoBehaviour
     // Calculate force direction with angle offsets
     private Vector3 CalculateForceDirection(Vector3 baseDirection)
     {
-        // Horizontal angle (English - left/right spin) — rotate around Y
+        // Horizontal angle (English - left/right spin) ï¿½ rotate around Y
         Vector3 horizontalRotated = Quaternion.AngleAxis(angleOffsetDegrees, Vector3.up) * baseDirection;
 
-        // Vertical angle (Draw/follow — rotate around right axis)
+        // Vertical angle (Draw/follow ï¿½ rotate around right axis)
         Vector3 rightAxis = Vector3.Cross(Vector3.up, horizontalRotated).normalized;
         Vector3 forceDir = Quaternion.AngleAxis(verticalAngleDegrees, rightAxis) * horizontalRotated;
 

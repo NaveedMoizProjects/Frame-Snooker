@@ -39,6 +39,16 @@ public class GameManager : MonoBehaviour
     [Tooltip("Below this speed, a moving ball is snapped to a full stop to kill physics jitter.")]
     [SerializeField] private float snapToZeroThreshold = 0.09f;
 
+    [Header("Off-Table Safeguard")]
+    [Tooltip("Min X/Z of the play area. Anything outside this is treated as 'the cue ball left the table'. " +
+             "Defaults are the outer extents of the cushion colliders, so a ball sitting in a pocket jaw " +
+             "is still comfortably inside.")]
+    [SerializeField] private Vector2 playAreaMin = new Vector2(-5.9f, -8.5f);
+    [SerializeField] private Vector2 playAreaMax = new Vector2(5.9f, 8.5f);
+    [Tooltip("Y below which the cue ball counts as having fallen off/through the table. Balls currently " +
+             "have FreezePositionY so this can't trigger - it's here for if that constraint is ever lifted.")]
+    [SerializeField] private float minimumY = 3.0f;
+
     [Header("TEMP DEBUG - delete after fixing")]
     [SerializeField] private bool debugLogging = true;
     private float debugLogTimer2 = 0f;
@@ -48,6 +58,12 @@ public class GameManager : MonoBehaviour
     private bool strikeRequested = false;
     private bool confirmMode = false;
     private bool inputLocked = false;
+    private bool frameOver = false;
+
+    // Fires once when the frame ends (black potted off the end of the colour sequence).
+    // Argument is the winning player index, or -1 for a tie.
+    public event Action<int> OnFrameEnded;
+    public bool IsFrameOver => frameOver;
 
     private CameraSwitching cameraSwitching;
     private bool wasMovingLastCheck = false;
@@ -124,7 +140,26 @@ public class GameManager : MonoBehaviour
 
     void FixedUpdate()
     {
+        CheckCueBallOffTable();
         CheckNextPlay(balls);
+    }
+
+    // Safeguard for the cue ball leaving the playable surface (launched off a rail, squeezed
+    // out through a collider seam). Routed through OnBallPotted so it lands on exactly the same
+    // penalty path as potting the cue ball: respot + foul + turn passes, scored by EvaluateFoul.
+    private void CheckCueBallOffTable()
+    {
+        if (cueBall == null || frameOver) return;
+        if (PottedThisShot.Contains(cueBall)) return; // already handled this shot
+
+        Vector3 p = cueBall.transform.position;
+        bool outside = p.x < playAreaMin.x || p.x > playAreaMax.x
+                    || p.z < playAreaMin.y || p.z > playAreaMax.y
+                    || p.y < minimumY;
+        if (!outside) return;
+
+        Debug.Log($"[GMDebug] Cue ball left the table at {p} - treating as a foul and respotting.");
+        OnBallPotted(cueBall);
     }
 
     // ----- Ball motion / next-play logic -----
@@ -181,6 +216,12 @@ public class GameManager : MonoBehaviour
     // First press enters Confirm mode (locks input). Second press requests the strike.
     public void ConfirmButtonPressed()
     {
+        if (frameOver)
+        {
+            Debug.Log("Frame is over - no further shots accepted.");
+            return;
+        }
+
         if (!nextplay)
         {
             Debug.Log("Cannot confirm while balls are moving.");
@@ -224,6 +265,8 @@ public class GameManager : MonoBehaviour
     // currently in progress or just finished" - exactly what section 4 of the doc needs.
     public void RequestStrike()
     {
+        if (frameOver) return;
+
         strikeRequested = true;
         PottedThisShot.Clear();
         firstBallContacted = null; // Phase 4: fresh shot, no contact recorded yet
@@ -491,8 +534,31 @@ public class GameManager : MonoBehaviour
         else
         {
             currentTargetColour = null;
-            Debug.Log("[GMDebug] Colour sequence complete - frame finished. (End-of-frame handling: Phase 7.)");
+            EndFrame();
         }
+    }
+
+    // The black has gone down off the end of the colour sequence - the frame is over.
+    // Highest score wins; equal scores are reported as a tie (the real respotted-black
+    // tie-break procedure is not modelled).
+    private void EndFrame()
+    {
+        if (frameOver) return;
+        frameOver = true;
+
+        confirmMode = false;
+        inputLocked = true;
+        strikeRequested = false;
+
+        int winner = -1;
+        if (playerScores[0] > playerScores[1]) winner = 0;
+        else if (playerScores[1] > playerScores[0]) winner = 1;
+
+        Debug.Log(winner >= 0
+            ? $"[GMDebug] FRAME OVER - Player {winner} wins {playerScores[0]}-{playerScores[1]}."
+            : $"[GMDebug] FRAME OVER - tie at {playerScores[0]}-{playerScores[1]}.");
+
+        OnFrameEnded?.Invoke(winner);
     }
 
     // ======================================================================
@@ -563,7 +629,9 @@ public class GameManager : MonoBehaviour
         if (targetState == TargetBallState.Red)
         {
             // 6.2 - Player On Red
-            if (cueBallPotted || firstBallContacted == null)
+            // !firstType.HasValue means the recorded contact wasn't an identifiable ball, which
+            // is scored the same as hitting nothing - and keeps firstType.Value below safe.
+            if (cueBallPotted || firstBallContacted == null || !firstType.HasValue)
             {
                 legal = false;
                 points = Mathf.Max(4, BallValue[BallType.Red]); // 6.5: potting cue ball / hitting nothing
@@ -602,7 +670,7 @@ public class GameManager : MonoBehaviour
 
             BallType target = currentTargetColour.Value;
 
-            if (cueBallPotted || firstBallContacted == null)
+            if (cueBallPotted || firstBallContacted == null || !firstType.HasValue)
             {
                 legal = false;
                 points = Mathf.Max(4, BallValue[target]);

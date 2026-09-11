@@ -12,7 +12,12 @@ public class CueBallContactTracker : MonoBehaviour
     void OnCollisionEnter(Collision collision)
     {
         Rigidbody other = collision.rigidbody;
-        if (other == null) return; // hit a cushion/rail (no Rigidbody) - doesn't count as a "ball contact"
+        if (other == null) return; // no Rigidbody at all - definitely not a ball
+
+        // The cushions in this scene DO carry Rigidbodies, so a null check alone isn't enough -
+        // without this, a cushion would be recorded as the first ball contacted and the foul
+        // table would score the shot against a ball that was never hit.
+        if (other.GetComponent<BallIdentity>() == null) return;
 
         if (GameManager.Instance != null)
             GameManager.Instance.ReportCueBallContact(other);
