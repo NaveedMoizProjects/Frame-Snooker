@@ -66,7 +66,6 @@ public class BallRollingFriction : MonoBehaviour
 
             Vector3 v = ball.velocity;
             float speed = v.magnitude;
-            if (speed < 0.0001f) continue; // already fully at rest, nothing to do
 
             float radius = ballRadius.TryGetValue(ball, out var r) ? r : 0.0285f;
             Vector3 omega = ball.angularVelocity;
@@ -76,6 +75,11 @@ public class BallRollingFriction : MonoBehaviour
             Vector3 contactVel = v + Vector3.Cross(omega, contactOffset);
             contactVel.y = 0f; // table is flat - only horizontal slip matters
             float slip = contactVel.magnitude;
+
+            // A ball that isn't translating but still spins against the cloth (screw, right after a
+            // full-ball contact) is not at rest - this friction is exactly what turns that spin back
+            // into motion, so it has to keep running.
+            if (speed < 0.0001f && slip < 0.0001f) continue;
 
             float m = ball.mass;
 

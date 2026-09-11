@@ -49,6 +49,10 @@ public class GameManager : MonoBehaviour
              "have FreezePositionY so this can't trigger - it's here for if that constraint is ever lifted.")]
     [SerializeField] private float minimumY = 3.0f;
 
+    [Header("Ball in Hand (placement in the D)")]
+    [Tooltip("Shown while the player is placing the cue ball in the D: prompt label + a tick button wired to ConfirmPlacement.")]
+    [SerializeField] private GameObject placementPanel;
+
     [Header("TEMP DEBUG - delete after fixing")]
     [SerializeField] private bool debugLogging = true;
     private float debugLogTimer2 = 0f;
@@ -59,6 +63,21 @@ public class GameManager : MonoBehaviour
     private bool confirmMode = false;
     private bool inputLocked = false;
     private bool frameOver = false;
+    private bool awaitingPlacement = false;
+
+    // Spin: the live dot position from the spin widget, and the value locked in for the shot being
+    // played. RequestStrike copies one into the other before resetting the live value, so spin never
+    // carries over into the next shot but the strike that's already been requested still gets it.
+    private const float MaxSpinRadius = 0.85f;
+    private Vector2 spinOffset = Vector2.zero;
+    private Vector2 strikeSpin = Vector2.zero;
+
+    // The D, derived at Start from the Green/Brown/Yellow/Black spawn spots.
+    private Vector3 dCenter;
+    private float dRadius;
+    private Vector3 dOpenDirection; // unit XZ vector pointing from the baulk line into the D
+    private Vector3 lastValidPlacement;
+    private readonly Dictionary<Rigidbody, float> ballRadius = new Dictionary<Rigidbody, float>();
 
     // Fires once when the frame ends (black potted off the end of the colour sequence).
     // Argument is the winning player index, or -1 for a tie.
@@ -118,6 +137,10 @@ public class GameManager : MonoBehaviour
 
         // Set correct initial visibility (starts hidden, since targetState starts on Red).
         RefreshColourNominationPanel();
+
+        // Frame start: the first player places the cue ball in the D before anyone strikes.
+        ComputeDGeometry();
+        BeginPlacement();
     }
 
     // Shows the manually-built panel exactly when NeedsColourNomination is true, hides it
@@ -149,7 +172,8 @@ public class GameManager : MonoBehaviour
     // penalty path as potting the cue ball: respot + foul + turn passes, scored by EvaluateFoul.
     private void CheckCueBallOffTable()
     {
-        if (cueBall == null || frameOver) return;
+        // While in hand the ball is being dragged freely and may pass over the rails.
+        if (cueBall == null || frameOver || awaitingPlacement) return;
         if (PottedThisShot.Contains(cueBall)) return; // already handled this shot
 
         Vector3 p = cueBall.transform.position;
@@ -182,20 +206,29 @@ public class GameManager : MonoBehaviour
             // Phase 2: potted balls are pooled (SetActive(false)), not destroyed - skip them
             // entirely so they never block nextplay or get scanned for collisions.
             if (!ball.gameObject.activeInHierarchy) continue;
+            if (ball.isKinematic) continue; // cue ball while it's being dragged into the D
 
             float speed = ball.velocity.magnitude;
-            if (speed > moveThreshold)
+            // A ball that has almost stopped translating but still carries screw/follow spin is not
+            // at rest - the cloth is about to turn that spin back into motion. Judging rest on linear
+            // speed alone froze screw shots dead right after contact.
+            float slip = ContactSlip(ball);
+
+            if (speed > moveThreshold || slip > moveThreshold)
             {
                 anyMoving = true;
 
                 if (shouldLogThisTick)
-                    Debug.Log($"[GMDebug] {ball.gameObject.name} is moving at speed {speed:F4} pos={ball.transform.position}");
+                    Debug.Log($"[GMDebug] {ball.gameObject.name} is moving at speed {speed:F4} slip {slip:F4} pos={ball.transform.position}");
+            }
 
-                if (speed < snapToZeroThreshold)
-                {
-                    ball.velocity = Vector3.zero;
-                    ball.angularVelocity = Vector3.zero;
-                }
+            // Also clears vertical-axis side spin left on a resting ball, which produces no slip and
+            // would otherwise carry into the next shot.
+            if (speed < snapToZeroThreshold && slip < snapToZeroThreshold
+                && (ball.velocity != Vector3.zero || ball.angularVelocity != Vector3.zero))
+            {
+                ball.velocity = Vector3.zero;
+                ball.angularVelocity = Vector3.zero;
             }
         }
 
@@ -207,10 +240,32 @@ public class GameManager : MonoBehaviour
         wasMovingLastCheck = anyMoving;
     }
 
+    // Speed of the ball's surface where it touches the cloth - the same quantity BallRollingFriction
+    // acts on. Non-zero while the ball slides or spins against the cloth.
+    private float ContactSlip(Rigidbody ball)
+    {
+        Vector3 contactVel = ball.velocity + Vector3.Cross(ball.angularVelocity, Vector3.down * RadiusOf(ball));
+        contactVel.y = 0f;
+        return contactVel.magnitude;
+    }
+
+    private float RadiusOf(Rigidbody ball)
+    {
+        if (!ballRadius.TryGetValue(ball, out float r))
+        {
+            var sc = ball.GetComponent<SphereCollider>();
+            Vector3 s = ball.transform.lossyScale;
+            r = sc != null ? sc.radius * Mathf.Max(s.x, s.y, s.z) : 0f;
+            ballRadius[ball] = r;
+        }
+        return r;
+    }
+
     // ----- Confirm / Strike API (explicit, UI-friendly) -----
     public bool IsConfirmMode => confirmMode;
     public bool IsStrikeRequested => strikeRequested;
-    public bool IsInputLocked => inputLocked;
+    // Placement replaces normal aiming input entirely, so it locks the cue the same way confirm does.
+    public bool IsInputLocked => inputLocked || awaitingPlacement;
 
     // Called by the single on-screen button.
     // First press enters Confirm mode (locks input). Second press requests the strike.
@@ -234,6 +289,13 @@ public class GameManager : MonoBehaviour
         if (NeedsColourNomination)
         {
             Debug.Log("Cannot confirm: nominate a colour first (Colour state, reds still on table).");
+            return;
+        }
+
+        // Ball in hand: no shot until the cue ball has been placed in the D.
+        if (awaitingPlacement)
+        {
+            Debug.Log("Cannot confirm: place the cue ball in the D first.");
             return;
         }
 
@@ -265,9 +327,11 @@ public class GameManager : MonoBehaviour
     // currently in progress or just finished" - exactly what section 4 of the doc needs.
     public void RequestStrike()
     {
-        if (frameOver) return;
+        if (frameOver || awaitingPlacement) return;
 
         strikeRequested = true;
+        strikeSpin = spinOffset;
+        spinOffset = Vector2.zero;
         PottedThisShot.Clear();
         firstBallContacted = null; // Phase 4: fresh shot, no contact recorded yet
     }
@@ -290,6 +354,18 @@ public class GameManager : MonoBehaviour
         if (force <= 0f) force = 0.1f;
         baseStrikeForce = force;
         Debug.Log($"Strike base force set to: {baseStrikeForce}");
+    }
+
+    // ----- Spin (SPIN_LOGIC.md) -----
+    public Vector2 SpinOffset => spinOffset;
+    public Vector2 StrikeSpin => strikeSpin;
+
+    // Called by SpinSelectorUI while the player drags the hit-point dot. Locked once aim is
+    // confirmed, and clamped inside 85% of the ball so the outer (miscue) ring is unreachable.
+    public void SetSpinOffset(Vector2 offset)
+    {
+        if (confirmMode || awaitingPlacement) return;
+        spinOffset = Vector2.ClampMagnitude(offset, MaxSpinRadius);
     }
 
     // ----- Phase 2: Potting -----
@@ -344,6 +420,161 @@ public class GameManager : MonoBehaviour
             var id = other.GetComponent<BallIdentity>();
             Debug.Log($"[GMDebug] First contact this shot: {(id != null ? id.Type.ToString() : other.gameObject.name)}");
         }
+    }
+
+    // ======================================================================
+    // ----- Ball in hand: placement in the D (BALL_PLACEMENT_D.md) -----
+    // ======================================================================
+
+    public bool IsAwaitingPlacement => awaitingPlacement;
+    public Vector3 DCenter => dCenter;
+    public float DRadius => dRadius;
+    public Vector3 DOpenDirection => dOpenDirection;
+    public Vector3 LastValidPlacement => lastValidPlacement;
+
+    // Brown sits on the centre of the baulk line and Green/Yellow on the D's two ends, so their spawn
+    // spots give the D directly; the black spot says which side of the baulk line the D opens toward.
+    private void ComputeDGeometry()
+    {
+        Vector3? green = null, brown = null, yellow = null, black = null;
+        foreach (var ball in balls)
+        {
+            if (ball == null) continue;
+            var id = ball.GetComponent<BallIdentity>();
+            if (id == null) continue;
+            if (id.Type == BallType.Green) green = id.SpawnPosition;
+            else if (id.Type == BallType.Brown) brown = id.SpawnPosition;
+            else if (id.Type == BallType.Yellow) yellow = id.SpawnPosition;
+            else if (id.Type == BallType.Black) black = id.SpawnPosition;
+        }
+        if (!green.HasValue || !brown.HasValue || !yellow.HasValue || !black.HasValue)
+        {
+            Debug.LogError("GameManager: Green, Brown, Yellow and Black must all be in the Balls list to derive the D.", this);
+            return;
+        }
+
+        Vector3 alongBaulk = yellow.Value - green.Value;
+        alongBaulk.y = 0f;
+        dCenter = brown.Value;
+        dRadius = alongBaulk.magnitude * 0.5f;
+
+        Vector3 perpendicular = new Vector3(-alongBaulk.z, 0f, alongBaulk.x).normalized;
+        Vector3 towardBlack = black.Value - brown.Value;
+        dOpenDirection = Vector3.Dot(perpendicular, towardBlack) > 0f ? -perpendicular : perpendicular;
+
+        if (debugLogging) Debug.Log($"[GMDebug] D derived: centre={dCenter} radius={dRadius:F3} opens toward {dOpenDirection}");
+    }
+
+    // Inside the half-circle on the baulk side of the line, and clear of every other ball.
+    public bool IsValidPlacement(Vector3 point, out string reason)
+    {
+        Vector3 fromCentre = point - dCenter;
+        fromCentre.y = 0f;
+        if (fromCentre.magnitude > dRadius) { reason = "outside the D"; return false; }
+        if (Vector3.Dot(fromCentre, dOpenDirection) < 0f) { reason = "on the wrong side of the baulk line"; return false; }
+
+        float minGap = 2f * RadiusOf(cueBall);
+        foreach (var ball in balls)
+        {
+            if (ball == null || ball == cueBall || !ball.gameObject.activeInHierarchy) continue;
+            Vector3 gap = ball.transform.position - point;
+            gap.y = 0f;
+            if (gap.magnitude < minGap) { reason = $"overlapping {ball.gameObject.name}"; return false; }
+        }
+
+        reason = null;
+        return true;
+    }
+
+    // Frame start, and after every foul (house rule: ball in hand after ANY foul - see the note
+    // in BALL_PLACEMENT_D.md §1). The ball stays put if it's already somewhere legal in the D.
+    private void BeginPlacement()
+    {
+        if (frameOver || cueBall == null) return;
+
+        Vector3 current = cueBall.transform.position;
+        if (IsValidPlacement(current, out _))
+        {
+            lastValidPlacement = current;
+        }
+        else
+        {
+            lastValidPlacement = FindDefaultPlacement(current.y);
+            cueBall.velocity = Vector3.zero;
+            cueBall.angularVelocity = Vector3.zero;
+            cueBall.transform.position = lastValidPlacement;
+        }
+
+        awaitingPlacement = true;
+        RefreshPlacementPanel();
+        if (debugLogging) Debug.Log($"[GMDebug] Ball in hand for Player {currentPlayerIndex} - place the cue ball in the D.");
+    }
+
+    // Respawn point first (it already sits in the D), then spots fanning out across the D.
+    // Brown occupies the baulk-line centre, so that spot is never a legal default.
+    private Vector3 FindDefaultPlacement(float y)
+    {
+        if (cueBallRespawnPoint != null)
+        {
+            Vector3 p = cueBallRespawnPoint.position;
+            p.y = y;
+            if (IsValidPlacement(p, out _)) return p;
+        }
+
+        Vector3 alongBaulk = Vector3.Cross(Vector3.up, dOpenDirection);
+        for (int ring = 1; ring <= 4; ring++)
+        {
+            float r = dRadius * ring / 5f;
+            for (int step = 0; step <= 8; step++)
+            {
+                float angle = Mathf.PI * step / 8f;
+                Vector3 p = dCenter + (alongBaulk * Mathf.Cos(angle) + dOpenDirection * Mathf.Sin(angle)) * r;
+                p.y = y;
+                if (IsValidPlacement(p, out _)) return p;
+            }
+        }
+        Vector3 fallback = dCenter + dOpenDirection * (dRadius * 0.5f);
+        fallback.y = y;
+        return fallback;
+    }
+
+    // Called by CueBallPlacement when the player releases a drag. Only records the spot - the drag
+    // controller moves the ball itself, back to LastValidPlacement when this returns false.
+    public bool TryPlaceCueBall(Vector3 point)
+    {
+        if (!awaitingPlacement) return false;
+        if (!IsValidPlacement(point, out string reason))
+        {
+            Debug.Log($"[GMDebug] Placement rejected at {point}: {reason}.");
+            return false;
+        }
+        lastValidPlacement = point;
+        return true;
+    }
+
+    // Tick button on the placement panel.
+    public void ConfirmPlacement()
+    {
+        if (!awaitingPlacement) return;
+        if (!IsValidPlacement(cueBall.transform.position, out string reason))
+        {
+            Debug.Log($"[GMDebug] Can't confirm placement - the cue ball is {reason}.");
+            return;
+        }
+        EndPlacement();
+        if (debugLogging) Debug.Log($"[GMDebug] Cue ball placed at {cueBall.transform.position} - aim and play.");
+    }
+
+    private void EndPlacement()
+    {
+        awaitingPlacement = false;
+        RefreshPlacementPanel();
+    }
+
+    private void RefreshPlacementPanel()
+    {
+        if (placementPanel != null)
+            placementPanel.SetActive(awaitingPlacement);
     }
 
     // ======================================================================
@@ -549,6 +780,7 @@ public class GameManager : MonoBehaviour
         confirmMode = false;
         inputLocked = true;
         strikeRequested = false;
+        if (awaitingPlacement) EndPlacement(); // a foul on the final black still ends the frame
 
         int winner = -1;
         if (playerScores[0] > playerScores[1]) winner = 0;
@@ -703,7 +935,7 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-               
+
                 PassTurn();
             }
         }
@@ -713,6 +945,9 @@ public class GameManager : MonoBehaviour
             PassTurn();
 
             if (debugLogging) Debug.Log($"[GMDebug] FOUL: {points} pts to Player {OpponentIndex}.");
+
+            // After PassTurn it's the non-offending player's turn - they get the ball in hand.
+            BeginPlacement();
         }
     }
 }

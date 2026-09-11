@@ -24,11 +24,16 @@ public class Cue : MonoBehaviour
     [Header("Strike Control (Inspector Testing)")]
     [Range(0.01f, 15f)]
     [SerializeField] private float forceMultiplier = 1.0f; // scales the final force (live)
-    [Range(-45f, 45f)]
-    [SerializeField] private float angleOffsetDegrees = 0f; // horizontal English
-    [Range(-30f, 30f)]
-    [SerializeField] private float verticalAngleDegrees = 0f; // draw/follow
-    [SerializeField] private bool applySpinTorque = true; // apply rotational force
+
+    // ---------------- Spin (SPIN_LOGIC.md) ----------------
+    [Header("Spin")]
+    [Tooltip("How far off-centre the tip meets the ball at full dot deflection, as a fraction of the ball radius.")]
+    [Range(0f, 1f)]
+    [SerializeField] private float spinContactOffset = 0.7f;
+    [Tooltip("Cue elevation above horizontal. A level cue (0) can't make side spin curve the ball - " +
+             "the tilt is what turns side spin into swerve on the cloth.")]
+    [Range(0f, 30f)]
+    [SerializeField] private float cueElevationDegrees = 10f;
 
     // ---------------- Prediction lines (kept simple) ----------------
     [Header("Prediction Lines")]
@@ -123,12 +128,14 @@ public class Cue : MonoBehaviour
             if (debugLogTimer > 0.5f)
             {
                 debugLogTimer = 0f;
-                Debug.Log($"[CueDebug] confirmMode={confirmed} | nextplay={gameManager.isNextPlay()} | strikeForce={gameManager.GetStrikeForce()} | forceMul={forceMultiplier} | angle={angleOffsetDegrees}�");
+                Debug.Log($"[CueDebug] confirmMode={confirmed} | nextplay={gameManager.isNextPlay()} | strikeForce={gameManager.GetStrikeForce()} | forceMul={forceMultiplier} | spin={gameManager.SpinOffset}");
             }
         }
 
-        // Prediction and strike logic remain here (visual stick control moved to CueVisualController).
-        if (isReadyToHit && !confirmed)
+        // No aim line while the cue ball is in hand - the player is positioning it, not aiming.
+        if (gameManager.IsAwaitingPlacement)
+            HidePrediction();
+        else if (isReadyToHit && !confirmed)
             GenerateAimPrediction();
 
         // Only start strike when both confirmed AND strike requested
@@ -161,6 +168,13 @@ public class Cue : MonoBehaviour
         return v.sqrMagnitude < 1e-6f ? Vector3.zero : v.normalized;
     }
 
+    private void HidePrediction()
+    {
+        if (aimLineCue) aimLineCue.positionCount = 0;
+        if (aimLineObject) aimLineObject.positionCount = 0;
+        if (currentGhostBall != null) currentGhostBall.SetActive(false);
+    }
+
     // simplified, readable prediction: single straight segment
     private void GenerateAimPrediction()
     {
@@ -169,13 +183,8 @@ public class Cue : MonoBehaviour
 
         float tableY = Cueball.transform.position.y;
         Vector3 origin = Cueball.transform.position + Vector3.up * 0.01f;
-        // Predict from the same spin-adjusted direction ApplyForceToCueBall will actually strike
-        // along, so dialling in English visibly swings the aim line instead of the drawn line and
-        // the real shot silently disagreeing. Flattening afterwards drops the draw/follow tilt,
-        // which doesn't change the initial horizontal path anyway.
-        Vector3 rawDir = Cueball.transform.position - cuestickref.transform.position;
-        if (rawDir.sqrMagnitude < 1e-6f) return;
-        Vector3 dir = Flat(CalculateForceDirection(rawDir.normalized));
+        // Pure aim: spin only moves where the tip meets the ball, never the launch direction.
+        Vector3 dir = Flat(Cueball.transform.position - cuestickref.transform.position);
         if (dir == Vector3.zero) return;
 
         aimPoints.Clear();
@@ -349,11 +358,8 @@ public class Cue : MonoBehaviour
             if (gameManager == null) return;
         }
 
-        // Get base direction from cuestick to ball
-        Vector3 toBall = Cueball.transform.position - cuestickref.transform.position;
-        float dist = toBall.magnitude;
-
-        if (dist < 0.001f)
+        Vector3 aimForward = Flat(Cueball.transform.position - cuestickref.transform.position);
+        if (aimForward == Vector3.zero)
         {
             Debug.LogWarning("Cue too close to ball to apply force!");
             gameManager.ClearStrikeRequest();
@@ -361,14 +367,21 @@ public class Cue : MonoBehaviour
             return;
         }
 
-        Vector3 normalizedDir = toBall.normalized;
+        // The cue strikes along the pure aim, tilted down by its elevation. Spin never changes this
+        // direction - it only moves where the tip meets the ball, and AddForceAtPosition turns that
+        // offset into the matching spin (tau = r x F). Follow, screw, stun and swerve all come out of
+        // this one impulse; there's deliberately no per-dot-position special casing anywhere.
+        Vector3 right = Vector3.Cross(Vector3.up, aimForward).normalized;
+        float elevation = cueElevationDegrees * Mathf.Deg2Rad;
+        Vector3 strikeDirection = aimForward * Mathf.Cos(elevation) - Vector3.up * Mathf.Sin(elevation);
 
-        // Apply angle offsets (English/topspin)
-        Vector3 forceDirection = CalculateForceDirection(normalizedDir);
+        Vector2 spin = gameManager.StrikeSpin;
+        float maxOffset = cueBallRadius * spinContactOffset;
+        Vector3 contactPoint = cueballRigidbody.worldCenterOfMass - strikeDirection * cueBallRadius
+                             + right * (spin.x * maxOffset)
+                             + Vector3.up * (spin.y * maxOffset);
 
-        // Get base force and apply multiplier (live)
-        float baseForceMagnitude = gameManager.GetStrikeForce();
-        float finalForceMagnitude = baseForceMagnitude * forceMultiplier;
+        float impulse = gameManager.GetStrikeForce() * forceMultiplier;
 
         // Ensure cue ball is dynamic
         if (cueballRigidbody.isKinematic)
@@ -377,41 +390,13 @@ public class Cue : MonoBehaviour
             cueballRigidbody.isKinematic = false;
         }
 
-        // Diagnostics & ensure awake
-        Debug.Log($"[Cue] Applying impulse. mass={cueballRigidbody.mass}, preVel={cueballRigidbody.velocity}, finalImpulse={finalForceMagnitude}", this);
         cueballRigidbody.WakeUp();
+        cueballRigidbody.AddForceAtPosition(strikeDirection * impulse, contactPoint, ForceMode.Impulse);
 
-        // Apply as an impulse so mass/drag/angularDrag are respected.
-        cueballRigidbody.AddForce(forceDirection * finalForceMagnitude, ForceMode.Impulse);
-
-        // Apply spin if enabled (angular impulse)
-        if (applySpinTorque)
-        {
-            Vector3 spinAxis = Vector3.Cross(forceDirection, Vector3.up);
-            if (spinAxis.sqrMagnitude > 0.01f)
-            {
-                float spinMagnitude = finalForceMagnitude * 0.1f; // tuned factor
-                cueballRigidbody.AddTorque(spinAxis.normalized * spinMagnitude, ForceMode.Impulse);
-            }
-        }
-
-        Debug.Log($"[Cue Strike] Impulse={finalForceMagnitude:F2} | Angle={angleOffsetDegrees}� | Vertical={verticalAngleDegrees}� | Direction={forceDirection} | postVel={cueballRigidbody.velocity}", this);
+        Debug.Log($"[Cue Strike] Impulse={impulse:F2} | Spin={spin} | Elevation={cueElevationDegrees}deg | Aim={aimForward} | mass={cueballRigidbody.mass}", this);
 
         // clear requests/confirm after applying
         gameManager.ClearStrikeRequest();
         // gameManager.ClearConfirmMode();
-    }
-
-    // Calculate force direction with angle offsets
-    private Vector3 CalculateForceDirection(Vector3 baseDirection)
-    {
-        // Horizontal angle (English - left/right spin) � rotate around Y
-        Vector3 horizontalRotated = Quaternion.AngleAxis(angleOffsetDegrees, Vector3.up) * baseDirection;
-
-        // Vertical angle (Draw/follow � rotate around right axis)
-        Vector3 rightAxis = Vector3.Cross(Vector3.up, horizontalRotated).normalized;
-        Vector3 forceDir = Quaternion.AngleAxis(verticalAngleDegrees, rightAxis) * horizontalRotated;
-
-        return forceDir.normalized;
     }
 }

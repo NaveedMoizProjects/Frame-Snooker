@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 //using static UnityEditor.Rendering.CoreEditorDrawer<TData>;
 
 /// <summary>
@@ -34,6 +35,11 @@ public class CueVisualController : MonoBehaviour
     private float initialHeight;
     private Camera mainCamera;
 
+    // A drag that starts on top of UI (the spin widget, the buttons) belongs to that UI, not to aiming.
+    private bool dragStartedOverUI;
+    private Renderer[] stickRenderers;
+    private bool stickVisible = true;
+
     void Start()
     {
         mainCamera = Camera.main;
@@ -45,6 +51,14 @@ public class CueVisualController : MonoBehaviour
             return;
         }
 
+        // Only renderers that start enabled, so hiding and re-showing can't switch on something
+        // that was deliberately turned off.
+        var all = CueStick.GetComponentsInChildren<Renderer>(true);
+        var visible = new System.Collections.Generic.List<Renderer>();
+        foreach (var r in all)
+            if (r.enabled) visible.Add(r);
+        stickRenderers = visible.ToArray();
+
         // Initialize distances/angle from current placement if available
         Vector3 local = CueStick.transform.position - Cueball.transform.position;
         initialHeight = local.y;
@@ -55,6 +69,10 @@ public class CueVisualController : MonoBehaviour
 
     void Update()
     {
+        // The stick is hidden while the cue ball is in hand, matching the reference placement screen.
+        bool placing = GameManager.Instance != null && GameManager.Instance.IsAwaitingPlacement;
+        SetStickVisible(!placing);
+
         if (respectInputLock && GameManager.Instance != null && GameManager.Instance.IsInputLocked)
             return;
 
@@ -67,7 +85,10 @@ public class CueVisualController : MonoBehaviour
         // Mouse drag
         if (enableMouseControl)
         {
-            if (Input.GetMouseButton(0))
+            if (Input.GetMouseButtonDown(0))
+                dragStartedOverUI = IsPointerOverUI(-1);
+
+            if (Input.GetMouseButton(0) && !dragStartedOverUI)
             {
                 // Use mouse delta X (frame) to rotate horizontally
                 float dx = Input.GetAxis("Mouse X");
@@ -83,12 +104,28 @@ public class CueVisualController : MonoBehaviour
         if (enableTouchControl && Input.touchCount == 1)
         {
             Touch t = Input.GetTouch(0);
-            if (t.phase == TouchPhase.Moved)
+            if (t.phase == TouchPhase.Began)
+                dragStartedOverUI = IsPointerOverUI(t.fingerId);
+
+            if (t.phase == TouchPhase.Moved && !dragStartedOverUI)
             {
                 float dx = t.deltaPosition.x / Mathf.Max(Screen.width, 1f); // normalized
                 angleY += dx * rotationSensitivity * 0.5f; // scale
             }
         }
+    }
+
+    private static bool IsPointerOverUI(int pointerId)
+    {
+        return EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(pointerId);
+    }
+
+    private void SetStickVisible(bool visible)
+    {
+        if (visible == stickVisible || stickRenderers == null) return;
+        stickVisible = visible;
+        foreach (var r in stickRenderers)
+            if (r != null) r.enabled = visible;
     }
 
     private void ApplyPositionAndRotation()
