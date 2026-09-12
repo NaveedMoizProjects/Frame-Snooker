@@ -37,6 +37,12 @@ public class SnookerAI : MonoBehaviour
     [Tooltip("Power fraction for the break shot - the firm hit into a still-racked pack when there is " +
              "nothing on. A soft safety here just taps the pack and hands back the same position.")]
     [SerializeField] private float breakPowerFraction = 0.65f;
+
+    [Header("Shot selection margins")]
+    [Tooltip("Extra room, as a fraction of the ball radius, the AI insists on down a shot line before " +
+             "it will commit to it. Zero means it will try to thread gaps it cannot physically hit - " +
+             "off the break that means grazing the pink and fouling.")]
+    [SerializeField] private float sightMarginBallRadii = 0.5f;
     [SerializeField] private Vector2 powerFractionLimits = new Vector2(0.06f, 0.85f);
 
     [Header("Debug")]
@@ -173,6 +179,7 @@ public class SnookerAI : MonoBehaviour
     }
 
     private float BallDiameter => cue.CueBallRadius * 2f;
+    private float SightMargin => cue.CueBallRadius * Mathf.Max(0f, sightMarginBallRadii);
 
     // ---------------------------------------------------------------- 1. When the AI acts
     private bool MyTurnToAct()
@@ -349,8 +356,8 @@ public class SnookerAI : MonoBehaviour
                 float cutAngle = Vector3.Angle(aimDir, pocketDir);
                 if (cutAngle > MaxCutAngleDegrees) continue;
 
-                if (!cue.IsPathClear(cueBallPos, ghost, ball, cueBall, true)) continue;
-                if (!cue.IsPathClear(objPos, pocket, ball, ignoreCueOnPocketLine, false)) continue;
+                if (!cue.IsPathClear(cueBallPos, ghost, ball, cueBall, true, SightMargin)) continue;
+                if (!cue.IsPathClear(objPos, pocket, ball, ignoreCueOnPocketLine, false, SightMargin)) continue;
 
                 float span = toGhost.magnitude + Flat3(pocket - objPos).magnitude;
 
@@ -649,7 +656,7 @@ public class SnookerAI : MonoBehaviour
                 if (aimDir.sqrMagnitude < 1e-6f) continue;
                 aimDir = aimDir.normalized;
 
-                if (!cue.IsPathClear(cueBallPos, ghost, ball, cueBall, true)) continue;
+                if (!cue.IsPathClear(cueBallPos, ghost, ball, cueBall, true, SightMargin)) continue;
 
                 float power = SafetyPowerFor(Flat3(ghost - cueBallPos).magnitude);
                 Vector3 objectDir = Flat3(objPos - ghost).normalized;
@@ -758,7 +765,7 @@ public class SnookerAI : MonoBehaviour
             Vector3 ghost = ContactGhost(objPos, approach, impact);
             Vector3 toGhost = Flat3(ghost - from);
             if (toGhost.sqrMagnitude < 1e-6f) continue;
-            if (!cue.IsPathClear(from, ghost, ball, cueBall, true)) continue;
+            if (!cue.IsPathClear(from, ghost, ball, cueBall, true, SightMargin)) continue;
 
             aimDir = toGhost.normalized;
             return true;

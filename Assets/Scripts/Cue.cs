@@ -186,7 +186,10 @@ public class Cue : MonoBehaviour
     // selection asks the same question the aim line answers: is anything between these two points?
     // ignoreA/ignoreB drop the balls the caller is reasoning about (the target it wants to hit, and
     // the cue ball when it is being planned into a position it isn't standing in yet).
-    public bool IsPathClear(Vector3 from, Vector3 to, Rigidbody ignoreA, Rigidbody ignoreB, bool checkCushions)
+    // 'margin' widens the corridor beyond the bare ball radius. Shot selection needs it: a line that
+    // is clear by a hair is not a line the ball can actually be sent down, because the strike's cue
+    // elevation, the cloth and the physics step size all eat into that gap on the way.
+    public bool IsPathClear(Vector3 from, Vector3 to, Rigidbody ignoreA, Rigidbody ignoreB, bool checkCushions, float margin = 0f)
     {
         Vector3 delta = to - from;
         delta.y = 0f;
@@ -194,13 +197,15 @@ public class Cue : MonoBehaviour
         if (distance <= 1e-4f) return true;
         Vector3 dir = delta / distance;
 
+        float radius = cueBallRadius + Mathf.Max(0f, margin);
+
         // Start clear of whatever sits at 'from', otherwise the cast begins inside its own collider.
         float skip = cueBallRadius + 1e-3f;
         if (distance <= skip) return true;
         Vector3 origin = from + dir * skip;
         float span = distance - skip;
 
-        int count = Physics.SphereCastNonAlloc(origin, cueBallRadius, dir, castBuffer, span, ballLayer, QueryTriggerInteraction.Ignore);
+        int count = Physics.SphereCastNonAlloc(origin, radius, dir, castBuffer, span, ballLayer, QueryTriggerInteraction.Ignore);
         for (int i = 0; i < count; i++)
         {
             Rigidbody rb = castBuffer[i].collider.attachedRigidbody;
