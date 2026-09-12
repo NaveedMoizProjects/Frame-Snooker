@@ -33,6 +33,10 @@ public class SnookerAI : MonoBehaviour
     [Tooltip("Safeties are played at this fraction of the power the same distance would normally get. " +
              "Below about 0.5 the cue ball stops short of the ball on, which is a foul, not a safety.")]
     [SerializeField] private float safetyPowerMultiplier = 0.8f;
+
+    [Tooltip("Power fraction for the break shot - the firm hit into a still-racked pack when there is " +
+             "nothing on. A soft safety here just taps the pack and hands back the same position.")]
+    [SerializeField] private float breakPowerFraction = 0.65f;
     [SerializeField] private Vector2 powerFractionLimits = new Vector2(0.06f, 0.85f);
 
     [Header("Debug")]
@@ -538,7 +542,9 @@ public class SnookerAI : MonoBehaviour
         GenerateCandidates(cueBallPos, targetBuffer, false, candidates);
 
         if (!ChooseBestCandidate(out ShotCandidate best))
-            return BuildSafety(cueBallPos, targetBuffer, "no makeable pot exists");
+            return PackIsTight(targetBuffer)
+                ? BuildBreak(cueBallPos, targetBuffer)
+                : BuildSafety(cueBallPos, targetBuffer, "no makeable pot exists");
 
         if (best.potScore < profile.minAcceptablePotScore)
             return BuildSafety(cueBallPos, targetBuffer, $"best pot {best.potScore:F2} under {profile.minAcceptablePotScore:F2}");
@@ -562,6 +568,41 @@ public class SnookerAI : MonoBehaviour
             potScore = best.potScore,
             finalScore = best.finalScore,
             target = $"{best.type} -> pocket {best.pocket.x:F1},{best.pocket.z:F1} (cut {best.cutAngle:F0}deg)"
+        };
+    }
+
+    // Are the balls on still sitting as a rack? A fresh triangle spans well under a couple of ball
+    // widths from its own centre; once it has been opened up the spread is many times that.
+    private bool PackIsTight(List<Rigidbody> targets)
+    {
+        if (targets.Count < 4) return false;
+
+        Vector3 centre = Vector3.zero;
+        foreach (var ball in targets) centre += Flat3(ball.transform.position);
+        centre /= targets.Count;
+
+        float spread = 0f;
+        foreach (var ball in targets)
+            spread = Mathf.Max(spread, Flat3(ball.transform.position - centre).magnitude);
+
+        return spread < BallDiameter * 4f;
+    }
+
+    // The break: nothing is on and the pack is untouched, so hit the reachable ball on firmly enough
+    // to actually spread it. Playing the usual soft safety here taps the pack, leaves the opponent the
+    // identical position, and the frame never opens at all.
+    private ShotPlan BuildBreak(Vector3 cueBallPos, List<Rigidbody> targets)
+    {
+        Rigidbody target = NearestTo(cueBallPos, targets, out Vector3 aim);
+        return new ShotPlan
+        {
+            aimDir = aim,
+            spin = Vector2.zero,
+            powerFraction = Mathf.Clamp(breakPowerFraction, powerFractionLimits.x, powerFractionLimits.y),
+            nominate = NominationFor(target),
+            isSafety = true,
+            potScore = 0f,
+            target = $"break shot into the pack off {TypeName(target)}"
         };
     }
 

@@ -249,6 +249,17 @@ public class GameManager : MonoBehaviour
         return contactVel.magnitude;
     }
 
+    // Project settings leave Physics.autoSyncTransforms off, so a write to transform.position alone
+    // moves the visible ball while the physics body keeps its old pose - and the next physics step
+    // drags the ball back. Every respot/respawn has to move the body itself.
+    private static void TeleportBall(Rigidbody ball, Vector3 position)
+    {
+        ball.velocity = Vector3.zero;
+        ball.angularVelocity = Vector3.zero;
+        ball.position = position;
+        ball.transform.position = position;
+    }
+
     private float RadiusOf(Rigidbody ball)
     {
         if (!ballRadius.TryGetValue(ball, out float r))
@@ -391,7 +402,7 @@ public class GameManager : MonoBehaviour
             ball.angularVelocity = Vector3.zero;
 
             if (cueBallRespawnPoint != null)
-                ball.transform.position = cueBallRespawnPoint.position;
+                TeleportBall(ball, cueBallRespawnPoint.position);
             else
                 Debug.LogWarning("GameManager: cueBallRespawnPoint not assigned - cue ball left where it was potted.", this);
 
@@ -500,9 +511,7 @@ public class GameManager : MonoBehaviour
         else
         {
             lastValidPlacement = FindDefaultPlacement(current.y);
-            cueBall.velocity = Vector3.zero;
-            cueBall.angularVelocity = Vector3.zero;
-            cueBall.transform.position = lastValidPlacement;
+            TeleportBall(cueBall, lastValidPlacement);
         }
 
         awaitingPlacement = true;
@@ -732,9 +741,7 @@ public class GameManager : MonoBehaviour
             // [Assumed, polish item] Spot-conflict rule (real snooker: nearest available spot
             // up the table if occupied) is not handled yet - straight respot to SpawnPosition
             // for now, per the doc's note that this edge case is rare and can be revisited later.
-            colourBall.transform.position = identity.SpawnPosition;
-            colourBall.velocity = Vector3.zero;
-            colourBall.angularVelocity = Vector3.zero;
+            TeleportBall(colourBall, identity.SpawnPosition);
             colourBall.gameObject.SetActive(true);
 
             targetState = TargetBallState.Red;

@@ -28,7 +28,9 @@ public class SpinSelectorUI : MonoBehaviour, IPointerDownHandler, IDragHandler
     [SerializeField] private RectTransform miniDot;
     [SerializeField] private Button openButton;
 
-    private bool wantsOpen = true;
+    // Closed by default: per SPIN_LOGIC.md section 6 the always-visible element is the mini preview,
+    // and the full widget only expands when the player taps it open.
+    private bool wantsOpen = false;
     private bool dragging;
 
     void Awake()
