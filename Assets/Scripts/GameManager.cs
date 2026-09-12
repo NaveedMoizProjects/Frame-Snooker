@@ -953,8 +953,11 @@ public class GameManager : MonoBehaviour
 
             if (debugLogging) Debug.Log($"[GMDebug] FOUL: {points} pts to Player {OpponentIndex}.");
 
-            // After PassTurn it's the non-offending player's turn - they get the ball in hand.
-            BeginPlacement();
+            // Ball in hand is driven by the cue ball being off the table, NOT by "a foul happened"
+            // (BALL_PLACEMENT_D.md section 1, corrected rule). On every other foul - wrong ball hit
+            // first, wrong colour potted - the cue ball is still on the cloth, so the incoming player
+            // plays it from where it lies, exactly as in tournament snooker.
+            if (cueBallPotted) BeginPlacement();
         }
     }
 }
