@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6fb00b2500e85df4a895a8f0763a13f4, type: 3}
+  m_Name: ProAI
+  m_EditorClassIdentifier: 
+  aimErrorDegreesEasy: {x: 0.3, y: 0.6}
+  aimErrorDegreesHard: {x: 1, y: 1.5}
+  easyPotScore: 0.8
+  hardPotScore: 0.3
+  aimErrorDegreesPerBallPotted: 0.1
+  powerErrorPercent: 4
+  powerErrorFloorFraction: 0.2
+  minAcceptablePotScore: 0.2
+  safetyProbability: {x: 0.5, y: 0.7}
+  safetyRollPotScore: 0.45
+  positionWeight: 0.6
+  deliberateSpinUsage: 2
+  candidateSurveyCount: 0
+  softPotCap: {x: 7, y: 8}
+  pressureRamp: 0.4

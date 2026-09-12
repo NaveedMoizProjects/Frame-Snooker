@@ -66,6 +66,7 @@ public class Cue : MonoBehaviour
 
     // reuse buffer
     private readonly List<Vector3> aimPoints = new List<Vector3>(4);
+    private readonly RaycastHit[] castBuffer = new RaycastHit[16];
 
     // debug
     [Header("TEMP DEBUG - delete after fixing")]
@@ -168,6 +169,63 @@ public class Cue : MonoBehaviour
         return v.sqrMagnitude < 1e-6f ? Vector3.zero : v.normalized;
     }
 
+    // Where the cue is pointing right now, derived purely from the stick's own position. Aim comes
+    // from nowhere else - SnookerAI steers this by moving the stick, exactly like a human drag does,
+    // so there is no second aiming path that could be more accurate than what the player gets.
+    public Vector3 CurrentAimForward => Flat(Cueball.transform.position - cuestickref.transform.position);
+
+    public float CueBallRadius => cueBallRadius;
+
+    // Direction the cue ball deflects to after contact: the component of its approach perpendicular
+    // to the object ball's departure line (equal-mass elastic "throw-off"). Shared with SnookerAI's
+    // position approximation so both use one definition of where the cue ball goes next.
+    public Vector3 CueDirectionAfterContact(Vector3 approachDir, Vector3 objectBallDir)
+        => Flat(approachDir - Vector3.Project(approachDir, objectBallDir));
+
+    // The line-of-sight test behind GenerateAimPrediction's ball/rail casts, exposed so shot
+    // selection asks the same question the aim line answers: is anything between these two points?
+    // ignoreA/ignoreB drop the balls the caller is reasoning about (the target it wants to hit, and
+    // the cue ball when it is being planned into a position it isn't standing in yet).
+    public bool IsPathClear(Vector3 from, Vector3 to, Rigidbody ignoreA, Rigidbody ignoreB, bool checkCushions)
+    {
+        Vector3 delta = to - from;
+        delta.y = 0f;
+        float distance = delta.magnitude;
+        if (distance <= 1e-4f) return true;
+        Vector3 dir = delta / distance;
+
+        // Start clear of whatever sits at 'from', otherwise the cast begins inside its own collider.
+        float skip = cueBallRadius + 1e-3f;
+        if (distance <= skip) return true;
+        Vector3 origin = from + dir * skip;
+        float span = distance - skip;
+
+        int count = Physics.SphereCastNonAlloc(origin, cueBallRadius, dir, castBuffer, span, ballLayer, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            Rigidbody rb = castBuffer[i].collider.attachedRigidbody;
+            if (rb == null || rb == ignoreA || rb == ignoreB) continue;
+            return false;
+        }
+
+        return !checkCushions || !Physics.Raycast(origin, dir, span, tableLayer, QueryTriggerInteraction.Ignore);
+    }
+
+    // Stops a predicted roll at the first cushion it would meet, so position guesses can't score a
+    // resting spot that is actually off the table.
+    public Vector3 ClampToCushion(Vector3 from, Vector3 to)
+    {
+        Vector3 delta = to - from;
+        delta.y = 0f;
+        float distance = delta.magnitude;
+        if (distance <= 1e-4f) return to;
+        Vector3 dir = delta / distance;
+
+        return Physics.Raycast(from, dir, out RaycastHit hit, distance, tableLayer, QueryTriggerInteraction.Ignore)
+            ? new Vector3(hit.point.x, to.y, hit.point.z) - dir * cueBallRadius
+            : to;
+    }
+
     private void HidePrediction()
     {
         if (aimLineCue) aimLineCue.positionCount = 0;
@@ -184,7 +242,7 @@ public class Cue : MonoBehaviour
         float tableY = Cueball.transform.position.y;
         Vector3 origin = Cueball.transform.position + Vector3.up * 0.01f;
         // Pure aim: spin only moves where the tip meets the ball, never the launch direction.
-        Vector3 dir = Flat(Cueball.transform.position - cuestickref.transform.position);
+        Vector3 dir = CurrentAimForward;
         if (dir == Vector3.zero) return;
 
         aimPoints.Clear();
@@ -265,7 +323,7 @@ public class Cue : MonoBehaviour
                 // object-ball direction, standard equal-mass elastic collision "throw-off" line).
                 // This is what was missing - previously aimPoints stopped exactly at contact,
                 // so the white line never showed where the cue ball goes after the hit.
-                Vector3 cueDirAfter = Flat(currentDir - Vector3.Project(currentDir, objDir));
+                Vector3 cueDirAfter = CueDirectionAfterContact(currentDir, objDir);
                 if (cueDirAfter != Vector3.zero)
                 {
                     float cueStubLen = Mathf.Max(0.01f, contactStubLength);
@@ -358,7 +416,7 @@ public class Cue : MonoBehaviour
             if (gameManager == null) return;
         }
 
-        Vector3 aimForward = Flat(Cueball.transform.position - cuestickref.transform.position);
+        Vector3 aimForward = CurrentAimForward;
         if (aimForward == Vector3.zero)
         {
             Debug.LogWarning("Cue too close to ball to apply force!");
