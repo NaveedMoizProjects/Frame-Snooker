@@ -42,7 +42,10 @@ public class SnookerAI : MonoBehaviour
     [Tooltip("Extra room, as a fraction of the ball radius, the AI insists on down a shot line before " +
              "it will commit to it. Zero means it will try to thread gaps it cannot physically hit - " +
              "off the break that means grazing the pink and fouling.")]
-    [SerializeField] private float sightMarginBallRadii = 0.5f;
+    // 0.25 is deliberate: the break-off line that used to graze the pink had 0.045 units of room,
+    // which is 0.23 ball radii, so this still rejects it - while 0.5 was throwing away half the
+    // legitimate candidates on a cluttered table (measured 6 -> 3 on one mid-frame position).
+    [SerializeField] private float sightMarginBallRadii = 0.25f;
     [SerializeField] private Vector2 powerFractionLimits = new Vector2(0.06f, 0.85f);
 
     [Header("Debug")]

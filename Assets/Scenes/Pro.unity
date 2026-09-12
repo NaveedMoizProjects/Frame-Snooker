@@ -6622,6 +6622,7 @@ MonoBehaviour:
   buildUiAtRuntime: 1
   nominationPanel: {fileID: 748295480}
   statusLabel: {fileID: 1694118619}
+  ballOnLabel: {fileID: 0}
 --- !u!114 &1654029433
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -8706,7 +8707,9 @@ MonoBehaviour:
   thinkingDelaySeconds: {x: 0.5, y: 1.5}
   basePowerFraction: 0.1
   powerPerTableDiagonal: 0.35
-  safetyPowerFraction: 0.12
+  safetyPowerMultiplier: 0.8
+  breakPowerFraction: 0.65
+  sightMarginBallRadii: 0.25
   powerFractionLimits: {x: 0.06, y: 0.85}
   debugLogging: 1
 --- !u!4 &1931566286
