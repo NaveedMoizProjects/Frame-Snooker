@@ -6,6 +6,22 @@ separate copies of this logic, one per scene. Build it as a single `SnookerAI`
 MonoBehaviour driven by a small difficulty-settings asset (see §6), so `Beginner.unity`,
 `Medium.unity`, and `Pro.unity` each just reference a different settings asset.
 
+## 0. NON-NEGOTIABLE: legal-target selection is a correctness bug, not a difficulty knob
+
+**Playtesting found the AI attempting shots on balls it isn't legally allowed to hit at
+all** — e.g. going for a colour while reds are still on the table. This is not a
+"difficulty" concept and must be **100% correct at every single level, including
+Beginner** — real players, however unskilled, always know which ball is on; not knowing
+that isn't a skill deficiency, it's a rules violation. Candidate generation in §3 below
+MUST filter to only the current legal target (`Red` if any reds remain on the table and
+`CurrentTargetState == Red`; the specific nominated/sequence colour if
+`CurrentTargetState == Colour`) with zero exceptions, at every difficulty level. Before
+tuning anything else, verify this filter is actually being applied — if the AI is hitting
+illegal balls, the candidate-generation step is either not filtering by legal target at
+all, or something downstream is overriding/bypassing the filtered candidate list. Audit
+the actual shipped code against this section specifically; do not assume it already does
+this correctly just because it was specified this way originally.
+
 ## 1. When the AI acts
 
 - Trigger exactly like a human turn: `GameManager.CurrentPlayerIndex == aiPlayerIndex`,

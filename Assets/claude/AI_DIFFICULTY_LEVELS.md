@@ -67,45 +67,97 @@ strategic sense from the human — but structurally guaranteed non-zero miss cha
 every shot (see golden rule) means it is never literally unbeatable. A strong human
 player should still be able to win a meaningful fraction of frames.
 
-## Minimum pot-count acceptance targets (this is a floor, not just a ceiling)
+## Minimum pot-count acceptance targets — CLARIFIED: per single visit, not per match average
 
-Playtesting found all three levels potting far too little — Beginner potting almost
-nothing, Medium the same, Pro potting one ball then fouling. The soft-cap numbers above
-are an *upper* bound on a typical visit; they were never meant to also be read as "it's
-fine if it pots zero." Each level must reliably clear this **minimum**, measured across
-several full visits (not just a single break shot) before it's considered acceptable:
+**Important clarification (this was previously ambiguous and got misread as a
+match-wide/average target — it is not):** "a visit" means one continuous turn at the
+table — from the moment it becomes the AI's turn (because the human missed, fouled, or
+it's the AI's break) until the AI itself misses or fouls and the turn passes back. The
+target below applies to **that single visit**, essentially every time it happens — NOT
+averaged across a whole match, NOT "sometimes hits this, sometimes doesn't." Concretely:
 
-| Level | Minimum pots per typical visit | Upper bound (unchanged from above) |
-|---|---|---|
-| Beginner | **at least 2–3** | rarely exceeds 3 |
-| Medium | **at least 3–4** | rarely exceeds 5 |
-| Pro | **at least 5–6** | rarely exceeds 8 |
+```
+Human's turn ends (miss/foul) → it's now the AI's turn (one "visit" starts)
+  → AI must pot AT LEAST this many balls before its visit ends:
+       Beginner: 2-3 balls in THIS visit
+       Medium:   3-4 balls in THIS visit
+       Pro:      5-6 balls in THIS visit
+  → only after reaching (at least) that count is it acceptable for the AI's visit to
+     end (via a miss or foul) - a visit that pots 0-1 balls and then ends is a FAIL for
+     Beginner/Medium, and a visit that pots 0-4 balls and then ends is a FAIL for Pro,
+     for that specific visit.
+```
+
+This must hold true for **nearly every single AI visit**, not just as an average over
+many visits — e.g. Beginner potting 0 several times and 6 once, averaging out to "2-3
+across the match," does NOT satisfy this requirement. Test by giving the AI several
+separate turns (let the human player deliberately miss/pot-nothing to hand over the turn
+repeatedly) and checking the pot count of each individual resulting AI visit against the
+table above - if most individual visits are below the minimum, that's a fail, even if
+some outlier visits happen to hit or exceed it.
+
+The soft-cap/upper-bound numbers from earlier in this doc still apply on top of this (a
+visit shouldn't blow way past 3/5/8 either) — so each level's AI needs to land, per
+visit, inside a real range (e.g. Beginner: 2-3 up to a rare max of ~3-4, not 0 and not
+15), not just clear a floor.
 
 If a level is failing to hit its minimum, the fix is **not** to keep blindly lowering
 `aimErrorDegrees` further — first rule out a root-cause bug in the shot pipeline itself
 (candidate generation always rejecting valid shots, the previously-flagged unresolved
 0.5° `aimForward` systematic bias from the isolated-harness investigation, execution not
-actually applying the intended `spinOffset`/power, etc.). Only tune the error numbers
-once the underlying pipeline is confirmed to be executing shots faithfully — an AI that
-still can't pot after `aimErrorDegrees` is already near-zero is a pipeline bug, not a
-tuning problem, and pushing the numbers lower still won't fix it.
+actually applying the intended `spinOffset`/power, illegal-target selection wasting shots
+per `AI_SHOT_SELECTION.md` section 0, etc.). Only tune the error numbers once the
+underlying pipeline is confirmed to be executing shots faithfully — an AI that still
+can't pot after `aimErrorDegrees` is already near-zero is a pipeline bug, not a tuning
+problem, and pushing the numbers lower still won't fix it.
 
 Equally important: hitting these minimums must **not** come at the cost of the golden
 rule (never zero error, never unbeatable) or the upper bounds above — an AI that suddenly
 pots every ball with no misses is just as wrong as one that pots nothing. Iterate toward
 the middle of each range, not the edges.
 
+## Foul-rate acceptance targets (new — playtesting found fouls far too common)
+
+Two different things both get called "fouls," and they need different treatment:
+
+1. **Decision-logic fouls** — the AI aimed at an illegal ball entirely (e.g. going for a
+   colour while reds remain). Per `AI_SHOT_SELECTION.md` section 0, this must be **zero
+   at every level**, including Beginner — it's a correctness bug, not a difficulty
+   setting, full stop.
+2. **Physical/aim-driven fouls** — the AI aimed at the *correct* legal ball but its aim
+   error caused it to strike a different ball first, miss entirely, or pot the wrong
+   ball as a side effect. This naturally scales with skill level and is allowed to vary:
+
+| Level | Physical-foul rate target | Why |
+|---|---|---|
+| Beginner | Noticeably present — this is expected and fine, comes naturally from the larger `aimErrorDegrees` | A beginner missing badly enough to clip the wrong ball first is realistic, not a bug. |
+| Medium | Rare | Better aim + `minAcceptablePotScore`/safety logic mean it mostly avoids attempting shots likely to go wrong. |
+| Pro | Extremely rare, not mathematically impossible | Small aim error (golden rule keeps it non-zero) plus a high safety threshold when no confident pot exists means Pro should almost never foul in practice — but "almost never" not "literally cannot," per the golden rule elsewhere in this doc. If Pro's actual measured foul rate across several visits is anything other than very low, that points at a decision-logic bug (see item 1 above), not something to fix by shrinking error further. |
+
+If Beginner or Medium are fouling far more than expected, check decision-logic fouls
+(item 1) first — a high enough rate of illegal-ball-targeting can look like "the AI fouls
+constantly" even if the physical aim error itself is reasonable for that level.
+
 ## Quick sanity checklist before shipping
 
 - [ ] Beginner never deliberately snookers (only ever center-ball hits).
-- [ ] Beginner pots at least 2–3 balls in a typical visit, and rarely exceeds 3.
+- [ ] Beginner pots at least 2–3 balls in EACH individual AI visit (tested across
+      several separate visits, not just once), and rarely exceeds 3–4.
 - [ ] Medium sometimes plays a visible safety shot instead of a risky pot.
-- [ ] Medium pots at least 3–4 balls in a typical visit, and rarely exceeds 5.
+- [ ] Medium pots at least 3–4 balls in EACH individual AI visit (tested across several
+      separate visits, not just once), and rarely exceeds 5–6.
 - [ ] Pro plays a deliberate safety when no good pot exists, not just "always attempt."
 - [ ] Pro can occasionally miss even a straightforward-looking pot (error floor working).
-- [ ] Pro pots at least 5–6 balls in a typical visit, rarely exceeds 8, and long visits
-      get visibly shakier (later shots in a long break miss more than early ones).
+- [ ] Pro pots at least 5–6 balls in EACH individual AI visit (tested across several
+      separate visits, not just once), rarely exceeds 8, and long visits get visibly
+      shakier (later shots in a long break miss more than early ones).
 - [ ] None of the three levels ever produces `aimErrorDegrees == 0` or
       `powerErrorPercent == 0` on any single shot.
 - [ ] None of the three levels pots literally everything with no misses (upper bound
       and golden rule both still hold after fixing the minimums above).
+- [ ] AI NEVER targets an illegal ball (colour while reds remain, wrong colour vs the
+      nominated one) at ANY level — verified by watching several visits per level, not
+      assumed from the code alone.
+- [ ] Cue-ball-in-hand placement only triggers on frame start or when the cue ball is
+      actually potted — verified it does NOT trigger on a foul where the cue ball stayed
+      on the table (see `BALL_PLACEMENT_D.md` section 1, corrected rule).
