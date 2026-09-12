@@ -822,6 +822,19 @@ public class GameManager : MonoBehaviour
     private void PassTurn()
     {
         currentPlayerIndex = OpponentIndex;
+
+        // A colour is only "on" for the player who just potted a red. The moment their turn ends -
+        // missed the colour, or fouled - the incoming player is back on Red while reds remain.
+        // Without this the Colour state carried across the turn change, so BOTH players kept hunting
+        // that one colour with a full pack of reds still on the table.
+        // Reds gone is the exception: there the fixed Yellow->Black sequence must persist.
+        if (targetState == TargetBallState.Colour && RedsRemainingOnTable() > 0)
+        {
+            targetState = TargetBallState.Red;
+            currentTargetColour = null;
+            OnTargetChanged?.Invoke(targetState, currentTargetColour);
+        }
+
         if (debugLogging) Debug.Log($"[GMDebug] Turn passed - now Player {currentPlayerIndex}");
         OnTurnChanged?.Invoke(currentPlayerIndex);
     }
