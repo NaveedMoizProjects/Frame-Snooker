@@ -67,15 +67,45 @@ strategic sense from the human — but structurally guaranteed non-zero miss cha
 every shot (see golden rule) means it is never literally unbeatable. A strong human
 player should still be able to win a meaningful fraction of frames.
 
+## Minimum pot-count acceptance targets (this is a floor, not just a ceiling)
+
+Playtesting found all three levels potting far too little — Beginner potting almost
+nothing, Medium the same, Pro potting one ball then fouling. The soft-cap numbers above
+are an *upper* bound on a typical visit; they were never meant to also be read as "it's
+fine if it pots zero." Each level must reliably clear this **minimum**, measured across
+several full visits (not just a single break shot) before it's considered acceptable:
+
+| Level | Minimum pots per typical visit | Upper bound (unchanged from above) |
+|---|---|---|
+| Beginner | **at least 2–3** | rarely exceeds 3 |
+| Medium | **at least 3–4** | rarely exceeds 5 |
+| Pro | **at least 5–6** | rarely exceeds 8 |
+
+If a level is failing to hit its minimum, the fix is **not** to keep blindly lowering
+`aimErrorDegrees` further — first rule out a root-cause bug in the shot pipeline itself
+(candidate generation always rejecting valid shots, the previously-flagged unresolved
+0.5° `aimForward` systematic bias from the isolated-harness investigation, execution not
+actually applying the intended `spinOffset`/power, etc.). Only tune the error numbers
+once the underlying pipeline is confirmed to be executing shots faithfully — an AI that
+still can't pot after `aimErrorDegrees` is already near-zero is a pipeline bug, not a
+tuning problem, and pushing the numbers lower still won't fix it.
+
+Equally important: hitting these minimums must **not** come at the cost of the golden
+rule (never zero error, never unbeatable) or the upper bounds above — an AI that suddenly
+pots every ball with no misses is just as wrong as one that pots nothing. Iterate toward
+the middle of each range, not the edges.
+
 ## Quick sanity checklist before shipping
 
 - [ ] Beginner never deliberately snookers (only ever center-ball hits).
-- [ ] Beginner's pot count in a typical visit rarely exceeds 3.
+- [ ] Beginner pots at least 2–3 balls in a typical visit, and rarely exceeds 3.
 - [ ] Medium sometimes plays a visible safety shot instead of a risky pot.
-- [ ] Medium's pot count in a typical visit rarely exceeds 5.
+- [ ] Medium pots at least 3–4 balls in a typical visit, and rarely exceeds 5.
 - [ ] Pro plays a deliberate safety when no good pot exists, not just "always attempt."
 - [ ] Pro can occasionally miss even a straightforward-looking pot (error floor working).
-- [ ] Pro's pot count in a typical visit rarely exceeds 8, and long visits get visibly
-      shakier (later shots in a long break miss more than early ones).
+- [ ] Pro pots at least 5–6 balls in a typical visit, rarely exceeds 8, and long visits
+      get visibly shakier (later shots in a long break miss more than early ones).
 - [ ] None of the three levels ever produces `aimErrorDegrees == 0` or
       `powerErrorPercent == 0` on any single shot.
+- [ ] None of the three levels pots literally everything with no misses (upper bound
+      and golden rule both still hold after fixing the minimums above).

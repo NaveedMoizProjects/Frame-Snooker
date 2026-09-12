@@ -157,18 +157,33 @@ Single function, runs once per completed shot, decision table roughly:
 
 - `ScoreboardUI` — subscribes to `OnScoreChanged` / `OnTurnChanged`, purely reactive,
   manual `TextMeshProUGUI` references (no runtime building).
-- `ColourNominationUI` — **check whether this is still in use.** `GameManager`'s own
-  `Awake()` comment says: *"This replaces ColourNominationUI entirely — GameManager
-  just toggles the panel GameObject directly."* `GameManager` has its own
-  `colourNominationPanel` field + `RefreshColourNominationPanel()` wired to
-  `OnTargetChanged`. If `ColourNominationUI` is *also* still active in the scene on a
-  Canvas, you have **two independent nomination UIs** both listening to the same event
-  and both building/toggling their own panel — likely source of duplicated or
-  conflicting-looking colour-nomination UI. Recommend disabling/removing the
-  `ColourNominationUI` component from the scene if `GameManager`'s manual panel is the
-  one you're actually using (check `Hierarchy → CanvasGameObject` for both).
+- **Colour nomination flow (spec — replaces the previous "check for duplicate UI" flag).**
+  `GameManager`'s own `Awake()` comment claims its manual panel replaces
+  `ColourNominationUI` entirely; keep only ONE active nomination UI in the scene (remove
+  or disable the other), and it must behave exactly like this:
+  1. The moment a red is legally potted (`GameManager.NeedsColourNomination` becomes
+     `true`), show a panel with all 6 colour buttons (Yellow, Green, Brown, Blue, Pink,
+     Black) — reuse `ColourNominateButton` for each, passthrough to
+     `GameManager.OnColourNominated` is already correct and doesn't need to change.
+  2. The instant the player taps one button: call `OnColourNominated(colour)` (sets
+     `CurrentTargetColour`), then **collapse/hide the 6-button picker** and instead show a
+     small confirmation label on the canvas, e.g. `"Black selected"` /
+     `"Yellow selected"` — reuse the existing `statusLabel` /
+     `BuildStatusText()`-style pattern already present, just make sure it's actually
+     visible and updates immediately on selection rather than only reflecting state on
+     the next `OnTargetChanged` tick.
+  3. This label stays visible through aiming/strike so the player has a clear reminder of
+     which ball is "on." `Confirm`/`RequestStrike()` should remain blocked
+     (`NeedsColourNomination` gate, already correct in `ConfirmButtonPressed()`) until a
+     colour has been picked — no code change needed there, just confirm it still holds
+     once the UI is consolidated.
+  4. No new foul logic is needed here — hitting a ball other than the nominated colour
+     first is already a correctly-implemented foul (see
+     `docs/SCORING_FOUL_HITTING_AUDIT.md` item B5). This section is purely about making
+     the selection and the "which ball is on" state clearly visible to the player, not
+     about changing what counts as a foul.
 - `ColourNominateButton` — one per colour button, straightforward passthrough to
-  `GameManager.OnColourNominated`.
+  `GameManager.OnColourNominated`. No changes needed to this script itself.
 - `ShotPowerSlider` — only interactable in confirm mode + when balls aren't moving;
   fires the shot on pointer-up at whatever power the slider was left at.
 - `CameraSwitching` — three Cinemachine cameras (top-down / third-person /
