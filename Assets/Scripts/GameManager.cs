@@ -65,6 +65,12 @@ public class GameManager : MonoBehaviour
     private bool frameOver = false;
     private bool awaitingPlacement = false;
 
+    // Set by EvaluateFoul, read by EvaluateShotResult, which runs straight after it. A red potted on
+    // a foul shot must NOT advance Red -> Colour: after a foul the incoming player is still on Red
+    // while reds remain. Without this the state flipped anyway, and since only a legal colour pot
+    // flips it back, the frame got stuck on Colour with reds still on the table.
+    private bool lastShotWasFoul = false;
+
     // Spin: the live dot position from the spin widget, and the value locked in for the shot being
     // played. RequestStrike copies one into the other before resetting the live value, so spin never
     // carries over into the next shot but the strike that's already been requested still gets it.
@@ -713,18 +719,17 @@ public class GameManager : MonoBehaviour
 
             if (identity.Type == BallType.Red)
             {
-                if (targetState == TargetBallState.Red)
+                // Only a LEGAL red pot earns the colour. A red that drops as part of a foul shot
+                // leaves the incoming player on Red, per the real rule - and crucially, flipping
+                // here on a foul used to strand the frame on Colour for good, because nothing but a
+                // legal colour pot flips it back. That made both players hunt colours while fifteen
+                // reds sat untouched.
+                if (targetState == TargetBallState.Red && !lastShotWasFoul)
                 {
                     targetState = TargetBallState.Colour;
                     currentTargetColour = null; // must be nominated before next shot (or auto-set if reds now gone)
                     OnTargetChanged?.Invoke(targetState, currentTargetColour);
                 }
-                // NOTE (known gap, flagged rather than solved here): if this red pot was actually
-                // part of a FOUL shot (e.g. cue ball hit a colour first, then also potted a red),
-                // this still flips targetState to Colour, which isn't strictly correct - the
-                // opponent should arguably still be "on Red" after a foul. EvaluateFoul already
-                // scores this correctly either way; only this state-transition edge case remains.
-                // Revisit if it matters for your rules strictness.
             }
             else
             {
@@ -859,6 +864,7 @@ public class GameManager : MonoBehaviour
     // 6.1-6.4: single end-of-shot foul decision, run once per completed shot.
     private void EvaluateFoul()
     {
+        lastShotWasFoul = false;
         bool cueBallPotted = cueBall != null && PottedThisShot.Contains(cueBall);
         BallType? firstType = GetBallType(firstBallContacted);
 
@@ -948,6 +954,7 @@ public class GameManager : MonoBehaviour
         }
         else
         {
+            lastShotWasFoul = true;
             AwardPoints(OpponentIndex, points);
             PassTurn();
 
