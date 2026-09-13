@@ -20,11 +20,11 @@ MonoBehaviour:
   powerErrorPercent: 10
   powerErrorFloorFraction: 0.2
   minAcceptablePotScore: 0.25
-  makeabilityErrorFraction: 0.2
+  makeabilityErrorFraction: 0.16
   safetyProbability: {x: 0.15, y: 0.25}
   safetyRollPotScore: 0.5
   positionWeight: 0.3
   deliberateSpinUsage: 1
-  candidateSurveyCount: 3
+  candidateSurveyCount: 6
   softPotCap: {x: 4, y: 5}
   pressureRamp: 0.8

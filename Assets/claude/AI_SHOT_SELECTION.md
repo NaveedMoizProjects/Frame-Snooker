@@ -97,7 +97,7 @@ the way the ball will really travel:
 
   Beginner never filters candidates on makeability (it's never `PlaysDeliberateSafety`) so this
   fraction barely affects it; its throughput instead comes from `minAcceptablePotScore`, lowered
-  0.6 → 0.35 → 0.15, and `candidateSurveyCount` raised 1 → 2 (still below Medium's 3 and Pro's full
+  0.6 → 0.35 → 0.15, and `candidateSurveyCount` raised 1 → 2 (still below Medium's 6 and Pro's full
   survey).
 - **Next-shot quality** (§4, §5.1) only credits a leave with a pot the level could make by the
   same test. It is averaged over the predicted cue-ball rest and ±30% of its travel, because the

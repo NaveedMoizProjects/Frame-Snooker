@@ -19,8 +19,8 @@ MonoBehaviour:
   aimErrorDegreesPerBallPotted: 0.003
   powerErrorPercent: 4
   powerErrorFloorFraction: 0.2
-  minAcceptablePotScore: 0.15
-  makeabilityErrorFraction: 0.18
+  minAcceptablePotScore: 0.12
+  makeabilityErrorFraction: 0.15
   safetyProbability: {x: 0.5, y: 0.7}
   safetyRollPotScore: 0.45
   positionWeight: 0.6
