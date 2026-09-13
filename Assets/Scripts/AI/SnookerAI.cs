@@ -879,12 +879,34 @@ public class SnookerAI : MonoBehaviour
             : Mathf.Min(profile.candidateSurveyCount, candidates.Count);
 
         float bestScore = float.NegativeInfinity;
+        // Debug-only (see the SURVEY log below): the single easiest raw pot in this survey,
+        // tracked separately from finalScore's winner, so a temporary audit can tell whether
+        // position weighting ever picks a harder pot over an easier one on offer.
+        float easiestPotScore = float.NegativeInfinity;
+        float easiestPotCut = 0f;
         for (int i = 0; i < survey; i++)
         {
             ShotCandidate c = candidates[i];
             c.spin = ChooseSpin(ref c, out float positionScore);
             c.positionScore = positionScore;
-            c.finalScore = c.potScore * profile.PotWeight + c.positionScore * profile.positionWeight;
+
+            // A real player refines which GOOD pot to take for position, but doesn't sacrifice a
+            // pot they're actually confident in for a much harder one just because it leaves a nicer
+            // look at the next ball - measured live, the plain weighted sum had no such safeguard
+            // (21% of decisions picked a meaningfully harder pot than the easiest on offer, some
+            // trading a ~4deg cut for a 70+deg one purely on position score). Scale position's
+            // influence down as the pot itself gets harder, using the same easy/hard pot-score scale
+            // this profile already defines for aim error (AimErrorRangeFor) - full weight on an easy
+            // pot (>= easyPotScore), fading to none on a hard one (<= hardPotScore), so position still
+            // decides between comparably good pots but can no longer justify a drastically worse one.
+            float potHardness = Mathf.Clamp01(Mathf.InverseLerp(profile.easyPotScore, profile.hardPotScore, c.potScore));
+            c.finalScore = c.potScore * profile.PotWeight + c.positionScore * profile.positionWeight * (1f - potHardness);
+
+            if (c.potScore > easiestPotScore)
+            {
+                easiestPotScore = c.potScore;
+                easiestPotCut = c.cutAngle;
+            }
 
             if (c.finalScore > bestScore)
             {
@@ -892,6 +914,12 @@ public class SnookerAI : MonoBehaviour
                 best = c;
             }
         }
+
+        if (debugLogging && survey > 1)
+            Debug.Log($"[AI:{profile.name}] SURVEY candidates={survey}/{candidates.Count} " +
+                      $"chosen(pot={best.potScore:F2} pos={best.positionScore:F2} final={best.finalScore:F2} cut={best.cutAngle:F0}) " +
+                      $"easiestOnOffer(pot={easiestPotScore:F2} cut={easiestPotCut:F0}) " +
+                      $"pickedHarderPot={(best.potScore < easiestPotScore - 0.02f)}");
 
         // Re-aim for the spin actually chosen - topspin throws the object ball further.
         if (best.objectBall != null) CompensateForThrow(ref best);

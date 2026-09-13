@@ -75,6 +75,46 @@ Combine as `finalScore = potScore * potWeight + positionScore * positionWeight`,
 `positionWeight` is 0 for beginner (doesn't plan ahead at all) and increases for
 medium/pro (see next doc for exact weights).
 
+### Confirmed bug (September 2026): position weighting could justify a much harder pot
+
+Audited whether Pro's candidate comparison genuinely picks the best shot rather than an
+"acceptable" one. Survey depth was already correct (`candidateSurveyCount=0` means Pro
+compares every makeable candidate, verified live - never a truncated subset). But the
+plain weighted sum above has no floor: since `positionScore` is itself bounded to roughly
+`[0,1]` same as `potScore`, a large enough position advantage can outweigh *any* potScore
+gap, however extreme. Measured live over ~170 real decisions: Pro picked a meaningfully
+harder pot than the easiest one on offer in 21% of cases (mean potScore sacrifice 0.13,
+i.e. easiest available ~0.71 down to a chosen ~0.58), and in the worst 10 of those it
+traded a probably-trivial 2-4deg cut for a 44-76deg one purely because the harder pot
+scored better on position - something a real player essentially never does (you refine
+which *good* pot to take for shape; you don't wreck your own pot odds for it).
+
+Fixed by scaling `positionWeight`'s contribution down as the candidate's own `potScore`
+gets harder, using the same `easyPotScore`/`hardPotScore` interpolation this profile
+already defines for aim error (`AimErrorRangeFor`) - full position weight on an easy pot
+(`potScore >= easyPotScore`), fading linearly to zero on a hard one
+(`potScore <= hardPotScore`). Position still breaks ties among comparably-good pots; it
+can no longer buy a drastically worse one. No profile value changed (not
+`positionWeight`, not any of the values the difficulty-tuning rounds specifically forbade
+touching) - same formula, same inputs, just a data-driven reweighting term.
+
+Verified with controlled before/after runs (same profile settings, independent seeds,
+Pro): "picked a harder pot" rate 21% -> 9-11%, mean sacrifice when it still happens
+0.13 -> 0.07, sacrifices over 0.15 potScore 10/36 -> 1-2/20ish. Pot-attempt volume rose
+(mean pots/visit 3.18 -> ~4.5, since fewer visits die early on a self-inflicted risky
+pick) and the aggregate miss rate fell (16% -> ~11%) - both moving the *right* direction,
+not a tradeoff. Same effect confirmed on Medium (`positionWeight=0.3`, smaller because the
+lower weight already bounds how extreme a trade can get): "harder pot" rate 7% -> 6%,
+mean pots/visit 2.60 -> ~3.0, fail rate 22% -> 15-18%. Beginner is unaffected by
+construction (`positionWeight=0`, so the new scaling term multiplies zero either way).
+
+Checked separately whether better position measurably reduces how often Pro *faces* a
+50+ degree cut a shot or two later - it doesn't, at least not at a detectable level with
+this harness's per-visit random-table methodology (50+deg cut frequency stayed flat,
+~5% of attempts, before and after). The accuracy gain instead comes from Pro no longer
+volunteering itself into bad cuts it didn't need to take, not from avoiding cuts that were
+genuinely forced by the table geometry.
+
 ## 5. Deciding: attempt a pot, or play safe?
 
 - If candidate list is empty → must play a **safety shot** (no legal pot exists).
