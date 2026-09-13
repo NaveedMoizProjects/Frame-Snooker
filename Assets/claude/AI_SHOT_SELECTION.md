@@ -190,6 +190,59 @@ Do not re-ship this exact change on the isolated-test numbers alone if revisited
 needs a live-gameplay check, not just a controlled harness comparison, before being
 called a fix again.
 
+**Confirmed driver, unsolved (September 2026): long pots fail more because they need more
+impact speed, not (mainly) because of cut angle or table proportions.** A long pot needs
+the object ball to reach the pocket from further away, which - independent of cut angle -
+requires more launch speed and therefore more impact speed at the cue-object contact.
+`MaxControlledImpactSpeed`'s own calibration comment already documented that the collision
+gets less predictable well past 6.5 m/s (under 6: 0/25 failed; 6-8: 4/25; 8-11: 5/20;
+above 11: 14/52, median launch error 3.6deg). A fresh live measurement (Pro, 637 pot
+attempts, one run) reproduced this almost exactly (6.2% / 13.4% / 33-36% / 56-63% across
+the same bands), and confirmed it holds even controlling for cut angle (span 6-10 at a
+20-40deg cut failed 8%; span 10-14 at the *same* cut band failed 27% - same cut, longer
+pot, more speed needed, far more misses). This is very likely why long pots feel
+inaccurate even though the aggregate pot rate looks reasonable: misses concentrate
+visibly on the minority of attempts that are both long and require real pace.
+
+Two attempts to have `IsMakeableAtThisSkill` derate a candidate's own required impact
+speed (extra rotational uncertainty on top of `throwUncertainty`, scaled by how far the
+candidate's own `ImpactSpeed` sits above `MaxControlledImpactSpeed`) were tried and
+**reverted - neither produced a reliable improvement**:
+- A linear slope (0.6deg per m/s over the ceiling, taken from the calibration comment's
+  own two anchor points) measured on an independent Pro run (596 attempts): thinned how
+  often a >6.5 m/s candidate got attempted (8.5% of attempts -> 6.0%) but left the ones
+  still attempted failing at essentially the same rate (35.9% -> 33.3%) and did not move
+  the long-span fail rate outside noise (31.2% -> 35.2%, span 14-18).
+- A steeper exponential (same shape, scaled ~4x stronger) measured on a further
+  independent Pro run (362 attempts): made the *overall* fail rate slightly worse (14.1%
+  vs the 13.7% baseline) and the 6-8 m/s bucket worse still (57.1%), with no clean
+  improvement in the long-span bucket (28.6%, within noise of the 31.2% baseline).
+
+Both attempts targeted the wrong lever: they widen the *aim-error geometric gate*, which
+models the AI mis-aiming, when the actual failure mode at high pace is the physics
+engine's own collision/throw behaviour becoming less predictable at speed - something a
+purely geometric "rotate the expected path a bit more" check does not faithfully stand in
+for. Making the gate stricter mostly reshuffles *which* long/fast candidate gets attempted
+rather than reliably avoiding the risk.
+
+**What would plausibly help, not yet tried:** making `PotScore` itself carry a real
+pace-based difficulty penalty (not just `span/tableDiagonal`, which is linear and doesn't
+specifically flag the danger zone past ~6.5 m/s of required impact speed) so a long,
+fast-but-otherwise-easy pot ranks low enough to more often lose to a safety
+(`safetyRollPotScore`/`minAcceptablePotScore` gates), rather than trying to out-aim the
+unpredictability once the shot is already chosen. This changes shot *selection*, not the
+makeability gate, and is a more invasive change to core ranking - not attempted this round
+given two lower-risk attempts already failed to help; would need its own dedicated
+controlled test before shipping.
+
+Separately: table size (the table's absolute scale, not the 1.51:1 vs 2.01:1 proportion
+issue noted in the table-dimensions audit) is a real contributor here, mechanically - a
+smaller table would shorten every `objectToPocket` distance and thus lower the required
+impact speed for the same relative shot, moving fewer pots past the 6.5 m/s danger
+threshold. That is a separate, much larger, invasive change (rescaling cushions,
+colliders, pocket positions, spawn spots, and the AI's diagonal-dependent math) that has
+not been approved and was not attempted this round.
+
 ### 5.3 Pot power and safety/escape power are separate calculations
 
 A cut only launches the object ball at `impact speed × cos(cut)`, so pot power
