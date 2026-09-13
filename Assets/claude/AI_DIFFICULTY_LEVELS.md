@@ -43,10 +43,10 @@ deliberately missing).**
 
 | Level | Visits | Balls per visit (mean) | Visits with 3+ | Pot attempts dropped |
 |---|---|---|---|---|
-| Medium, before this pass | 823 | 0.27 | 0.5% | ≈40% |
-| Beginner | 26 | 0.92 | 12% | 16/21 (misses on pots it knew weren't makeable) |
-| Medium | 42 | 1.55 | 26% | 96% |
-| Pro | 442 | 2.08 | 33% (5+: 16%) | 95% |
+| Medium, before this pass | 851 | 0.27 | 0.6% | ≈41% (232 balls from 571 attempts) |
+| Beginner | 26 | 0.92 | 12% | 25/32 (its misses were pots it knew weren't makeable) |
+| Medium | 42 | 1.55 | 26% | 65/67 |
+| Pro | 484 | 2.11 | 34% (5+: 16%) | 1031/1078 |
 
 The per-visit minimums below are **not yet met on every visit**. Nearly all zero visits start
 with no makeable pot on the table (the availability ceiling above), not with a miss. The
