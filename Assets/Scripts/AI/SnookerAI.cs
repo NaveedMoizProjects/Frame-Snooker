@@ -103,6 +103,7 @@ public class SnookerAI : MonoBehaviour
     private int candidatesGenerated;
 
     private bool waitingForShot;
+    private float waitingForShotSince;
     private bool shotWasMine;
     private bool visitActive;
     private int ballsPottedThisVisit;
@@ -217,6 +218,11 @@ public class SnookerAI : MonoBehaviour
         // foul/result handlers, so by the time it runs the turn has already been passed or kept.
         gameManager.OnAllBallsStopped += HandleShotResolved;
 
+        // Lets GameManager refuse a human's stray Confirm/nominate/strike click that lands during the
+        // AI's own turn (none of that UI is turn-gated on its own) without ever blocking the AI's own
+        // calls to those same methods - see SetAiActing around TakeShot's confirm/strike sequence.
+        gameManager.RegisterAiPlayer(aiPlayerIndex);
+
         if (debugLogging)
             Debug.Log($"[AI:{profile.name}] Ready as Player {aiPlayerIndex}. " +
                       $"Table diagonal {tableDiagonal:F2}, {pockets.Count} pockets.");
@@ -243,11 +249,26 @@ public class SnookerAI : MonoBehaviour
             && !waitingForShot;
     }
 
+    // Hard ceiling on how long a real shot can take to resolve (aim settle + strike + every ball
+    // rolling to rest). Measured shots never come close to this - it exists purely so that if
+    // waitingForShot ever gets stuck true for a reason nobody has seen yet, the AI recovers on its own
+    // within a few seconds instead of sitting dead for the rest of the frame.
+    private const float MaxShotResolutionSeconds = 15f;
+
     private IEnumerator PlayLoop()
     {
         while (true)
         {
             yield return null;
+
+            if (waitingForShot && Time.time - waitingForShotSince > MaxShotResolutionSeconds)
+            {
+                Debug.LogWarning($"[AI:{profile.name}] waitingForShot stuck for {MaxShotResolutionSeconds}s with no " +
+                                  "OnAllBallsStopped - forcing it clear so the AI can try again.");
+                waitingForShot = false;
+                shotWasMine = false;
+            }
+
             if (!MyTurnToAct()) continue;
 
             if (!visitActive)
@@ -1192,6 +1213,11 @@ public class SnookerAI : MonoBehaviour
     {
         ShotPlan plan = ApplyError(PlanShot());
 
+        // Brackets every call below that mutates shared turn state (nomination, confirm, strike) so
+        // GameManager can tell the AI's own legitimate calls apart from a human's UI click landing
+        // during the AI's turn - see GameManager.SetAiActing/BlockedAsHumanInputDuringAiTurn.
+        gameManager.SetAiActing(true);
+
         if (plan.nominate.HasValue)
             gameManager.OnColourNominated(plan.nominate.Value);
 
@@ -1230,11 +1256,28 @@ public class SnookerAI : MonoBehaviour
         gameManager.SetStrikeForce(Mathf.Lerp(powerSlider.MinPower, powerSlider.MaxPower, plan.powerFraction));
         gameManager.RequestStrike();
 
-        waitingForShot = true;
-        shotWasMine = true;
+        gameManager.SetAiActing(false);
 
-        if (debugLogging && !plan.isSafety && plan.objectBall != null)
-            StartCoroutine(TrackPotAttempt(plan));
+        // Confirm/RequestStrike both silently no-op on a handful of guard conditions (frame just ended,
+        // ball-in-hand, a stray recheck of nextplay) - if either did, nothing was actually struck and
+        // nothing will ever call HandleShotResolved for this "shot". Only commit to waiting for a
+        // result when the strike was genuinely accepted; otherwise leave waitingForShot false so
+        // PlayLoop's next tick simply tries the whole shot again instead of hanging forever.
+        if (gameManager.IsConfirmMode && gameManager.IsStrikeRequested)
+        {
+            waitingForShot = true;
+            waitingForShotSince = Time.time;
+            shotWasMine = true;
+
+            if (debugLogging && !plan.isSafety && plan.objectBall != null)
+                StartCoroutine(TrackPotAttempt(plan));
+        }
+        else if (debugLogging)
+        {
+            Debug.LogWarning($"[AI:{profile.name}] Strike request was not accepted (confirmMode=" +
+                              $"{gameManager.IsConfirmMode}, strikeRequested={gameManager.IsStrikeRequested}) - " +
+                              "will retry next loop instead of waiting for a shot that was never taken.");
+        }
     }
 
     // Where the object ball WOULD go on a perfect ghost-ball contact, given the aim actually played

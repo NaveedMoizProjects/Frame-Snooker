@@ -46,6 +46,44 @@ because the latter mutates `targetState` / `currentTargetColour` for the *next* 
 This is intentional (see the comment above `EvaluateShotResult`) — don't reorder the
 subscriptions in `Awake()`.
 
+### Confirmed bug (September 2026): the AI's turn could freeze forever
+
+`RequestStrike()` used to set `strikeRequested = true` unconditionally, without checking
+that `ConfirmButtonPressed()` had actually put the game into confirm mode first. Neither
+of the UI entry points into this state machine (Confirm button, the colour-nomination
+buttons, the power slider's release handler) checked whose turn it was, either, so a
+human click landing during the AI's own turn - or, more rarely, `ConfirmButtonPressed()`
+silently no-op'ing on one of its own guards (ball-in-hand, colour not yet nominated, a
+one-frame `nextplay` flicker) right as `SnookerAI.TakeShot()` called it - could leave
+`confirmMode = false` with `strikeRequested = true`. `Cue.Update()` only ever arms
+`pendingStrike` when *both* are true together, so nothing after that point ever struck
+the ball, `OnAllBallsStopped` never fired, and `strikeRequested` was never cleared by
+anything else. Since `SnookerAI.MyTurnToAct()` requires `!IsStrikeRequested`, the AI's
+`PlayLoop` was then dead for the rest of the frame - exactly the reported symptom
+("the AI just stops, and only a manual human shot gets it going again"), because the
+human's own successful Confirm+strike is what happened to clear the stuck flag.
+
+Fixed on two levels (`GameManager.cs`, `SnookerAI.cs`):
+- `RequestStrike()` now refuses (no-ops) unless `confirmMode` is actually true, so the
+  desync can no longer happen at the source.
+- `GameManager` tracks which player index is AI-controlled (`RegisterAiPlayer`, set once
+  by `SnookerAI.Start()`) and whether the AI is mid-call into its own confirm/strike
+  sequence (`SetAiActing`, bracketed around that sequence in `TakeShot()`). Confirm,
+  colour nomination and Cancel all refuse a human's call that lands during the AI's turn
+  while it isn't the one calling, closing off the most likely real trigger.
+- `SnookerAI.TakeShot()` now checks `IsConfirmMode && IsStrikeRequested` right after
+  calling `RequestStrike()` before committing to `waitingForShot = true` - a rejected
+  request is treated as "try the whole shot again next loop," not as "we're now waiting
+  for a shot that was never taken."
+- `PlayLoop` also carries a hard 15-second watchdog on `waitingForShot` as a last resort,
+  in case some other not-yet-seen cause produces the same desync.
+
+Verified live via reflection through the real pipeline: forcing `RequestStrike()` with
+`confirmMode` false no longer sets `strikeRequested`; a simulated human `ConfirmButtonPressed()`
+during the AI's turn is now rejected while the AI's own `SetAiActing`-bracketed call still
+succeeds; two 40-60 visit runs of the AI playing full visits start-to-finish produced zero
+stalls and zero rejected-strike warnings under normal play.
+
 ## 2. Ball identity & the master ball list
 
 - `BallIdentity` (one per ball GameObject) stores `BallType` (Cue/Red/Yellow/…/Black)

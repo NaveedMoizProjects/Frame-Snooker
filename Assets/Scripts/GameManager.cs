@@ -65,6 +65,19 @@ public class GameManager : MonoBehaviour
     private bool frameOver = false;
     private bool awaitingPlacement = false;
 
+    // Which player index (if any) is AI-controlled, and whether the AI is mid-way through taking its
+    // own shot right now. Registered by SnookerAI.Start(); used only to stop a human's own UI input
+    // (Confirm button, colour nomination, the power slider) from being accepted during the AI's turn -
+    // none of those are gated on whose turn it is, so a stray click while the AI is "thinking" could set
+    // confirmMode/currentTargetColour out from under it. The AI's own calls always pass aiIsActing=true
+    // around themselves, so this never blocks the AI acting on its own turn.
+    private int aiPlayerIndex = -1;
+    private bool aiIsActing = false;
+    public void RegisterAiPlayer(int playerIndex) => aiPlayerIndex = playerIndex;
+    public void SetAiActing(bool acting) => aiIsActing = acting;
+    public bool IsAiTurn => aiPlayerIndex >= 0 && currentPlayerIndex == aiPlayerIndex;
+    private bool BlockedAsHumanInputDuringAiTurn => IsAiTurn && !aiIsActing;
+
     // Set by EvaluateFoul, read by EvaluateShotResult, which runs straight after it. A red potted on
     // a foul shot must NOT advance Red -> Colour: after a foul the incoming player is still on Red
     // while reds remain. Without this the state flipped anyway, and since only a legal colour pot
@@ -294,6 +307,12 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        if (BlockedAsHumanInputDuringAiTurn)
+        {
+            Debug.Log("[GMDebug] Ignoring Confirm - it's the AI's turn.");
+            return;
+        }
+
         if (!nextplay)
         {
             Debug.Log("Cannot confirm while balls are moving.");
@@ -334,6 +353,7 @@ public class GameManager : MonoBehaviour
     // "Clear" button - cancels aiming/confirm WITHOUT striking, goes back to free aim.
     public void CancelConfirm()
     {
+        if (BlockedAsHumanInputDuringAiTurn) return;
         confirmMode = false;
         inputLocked = false;
         strikeRequested = false;
@@ -345,6 +365,20 @@ public class GameManager : MonoBehaviour
     public void RequestStrike()
     {
         if (frameOver || awaitingPlacement) return;
+        if (BlockedAsHumanInputDuringAiTurn) return;
+
+        // Requesting a strike only makes sense once Confirm has actually locked the shot in - Cue.cs
+        // only ever fires off BOTH confirmMode and strikeRequested being true together. Setting this
+        // unconditionally used to leave strikeRequested permanently true whenever ConfirmButtonPressed
+        // had silently no-op'd for any reason (mode not entered, wrong turn, still awaiting nomination)
+        // - nothing but a real strike ever clears it, so SnookerAI.MyTurnToAct() (which requires
+        // !IsStrikeRequested) was then dead forever. Refusing here instead of blindly setting the flag
+        // means a rejected request is simply a no-op the caller can safely retry, not a permanent stall.
+        if (!confirmMode)
+        {
+            Debug.LogWarning("[GMDebug] RequestStrike ignored - not in confirm mode yet.");
+            return;
+        }
 
         strikeRequested = true;
         strikeSpin = spinOffset;
@@ -655,6 +689,11 @@ public class GameManager : MonoBehaviour
     // Called by the nomination UI when the player taps a colour while on Colour state.
     public void OnColourNominated(BallType chosen)
     {
+        if (BlockedAsHumanInputDuringAiTurn)
+        {
+            Debug.LogWarning($"[GMDebug] Ignoring nomination of {chosen} - it's the AI's turn.");
+            return;
+        }
         if (targetState != TargetBallState.Colour)
         {
             Debug.LogWarning($"[GMDebug] Ignoring nomination of {chosen} - not currently in Colour state.");
