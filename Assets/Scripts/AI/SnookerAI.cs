@@ -846,16 +846,8 @@ public class SnookerAI : MonoBehaviour
 
             // A couple of degrees off line is still a pot on an empty table, but not if it clips a ball
             // sitting just beside the pocket line, which the dead-straight sight check can't see.
-            // Confirmed live (September 2026): tight-line-gap shots (<0.5 ball radii of clearance to a
-            // neighbour) failed at ~29%, nearly 4x the wide-open rate, and over a third of those fails
-            // were literally the object ball running into that neighbour on the way - this check used
-            // margin=0 (a bare ball-radius corridor) while every sibling sight check in this same
-            // makeability gate and in GenerateCandidates already uses SightMargin. The perturbed,
-            // post-error/throw path modelled here is the AI's own admission that the shot might not go
-            // exactly as planned, so it should get at least as much clearance margin as the ideal
-            // straight line already requires at generation time, not less.
             Vector3 alongPath = objPos + objectDir * c.objectToPocket;
-            if (!cue.IsPathClear(objPos, alongPath, c.objectBall, cueBall, false, SightMargin)) return false;
+            if (!cue.IsPathClear(objPos, alongPath, c.objectBall, cueBall, false)) return false;
         }
         return true;
     }

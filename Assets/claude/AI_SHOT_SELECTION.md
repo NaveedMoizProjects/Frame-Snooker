@@ -158,25 +158,37 @@ contact/throw/jaw geometry; both swung sides must still drop. Levels that play d
 safety (`PlaysDeliberateSafety`) drop every non-makeable candidate before ranking the
 rest; Beginner never does, so it just ranks makeable ones first when any exist.
 
-**Confirmed bug (September 2026): the perturbed-path neighbour check used no safety
-margin.** After the swung aim clears the jaws (`DropsInto`), this method separately checks
-that the object ball's path to the pocket doesn't clip a neighbouring ball
-(`cue.IsPathClear(objPos, alongPath, c.objectBall, cueBall, false)`) - but called with no
-`margin` argument, i.e. a bare ball-radius corridor, while every sibling sight check in
-`GenerateCandidates` (and the cue-ball-to-ghost check earlier in this same method) requires
-`SightMargin` (built from `sightMarginBallRadii = 0.25`). Measured live: shots whose
-tightest line gap to a neighbour was under half a ball radius failed at ~29% (nearly 4x
-the wide-open rate), and over a third of those failures were literally the object ball
-running into that neighbour on the way - exactly what a zero-margin check on an
-*already-uncertain, error-perturbed* path would let through. Fixed by passing `SightMargin`
-into this call too, so the path this level admits might not go exactly as planned gets at
-least as much clearance as the ideal straight line already needed to become a candidate at
-all. Verified live (Pro, ~500 attempts before/after): tight-gap (<0.5r) fail rate roughly
-halved (29% -> 16%), overall fail rate 13.2% -> 11.7%, with a small, expected reduction in
-how many of those specific marginal tight-gap shots get attempted (candidates that were
-only "makeable" because of the inconsistent margin now correctly don't pass) - overall
-attempt volume elsewhere unaffected. Medium checked too, no regression outside its normal
-seed-to-seed variance.
+**Open question (September 2026): neighbour-clearance margin on the perturbed path -
+reverted, not confirmed.** The check that the object ball's post-error/throw path doesn't
+clip a neighbouring ball (`cue.IsPathClear(objPos, alongPath, c.objectBall, cueBall,
+false)`) passes no margin, unlike sibling sight checks elsewhere in this method and in
+`GenerateCandidates`, which require `SightMargin`. A controlled, isolated test (Pro,
+independent seeds, ~500 attempts before/after) measured passing `SightMargin` into this
+call as roughly halving the tight-gap (<0.5 ball radii clearance) fail rate (29% -> 16%)
+and improving the overall fail rate (13.2% -> 11.7%), and this was shipped as commit
+`7932e1d`. Actual gameplay testing afterward showed accuracy noticeably *worse*, not
+better - the opposite of what the isolated test measured - so the change was reverted
+(commit after `7932e1d`; net state now matches `42a8ae6` for this specific check).
+
+The isolated controlled test and live play disagreeing this sharply means the test likely
+wasn't representative of real mixed-gameplay table states. Worth checking before
+retrying:
+- The test scenario (fresh random open-ish table per visit via the harness) may not
+  represent real mid-frame clusters/break patterns where tight-gap shots are far more
+  common and where a stricter gate removes far more attempts than the isolated bucket
+  measurement suggested.
+- `SightMargin` (0.25 ball radii) may simply be too conservative for this specific check
+  given how it composes with real multi-ball table states - a smaller margin (not zero,
+  not the full sibling margin) might be worth measuring instead of an all-or-nothing
+  choice.
+- Possible interaction with the position-weighting fix (`42a8ae6`): that fix already
+  changed which candidates get ranked highest before this gate even runs, so this gate's
+  effect in isolation may not generalize to the post-position-weighting candidate mix the
+  isolated test didn't fully capture.
+
+Do not re-ship this exact change on the isolated-test numbers alone if revisited - it
+needs a live-gameplay check, not just a controlled harness comparison, before being
+called a fix again.
 
 ### 5.3 Pot power and safety/escape power are separate calculations
 
