@@ -6595,7 +6595,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f43f8a56456dcff4c902bbe8da1fd062, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  slidingFriction: 0.2
+  slidingFriction: 0.26
   rollingFriction: 0.13
   slipSpeedThreshold: 0.05
   stopSpeedThreshold: 0.03
