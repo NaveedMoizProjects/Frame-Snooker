@@ -41,8 +41,12 @@ public class Cue : MonoBehaviour
     [SerializeField] private LineRenderer aimLineObject;  // object-ball path
     [SerializeField] private float maxDistance = 60f;
     [SerializeField] private float maxNoHitLength = 8f;
-    [SerializeField] private int maxReflectionBounces = 3;      // max number of cushion bounces to predict
-    [SerializeField] private float reflectionEpsilon = 0.02f;  // small
+    // No longer read: GenerateAimPrediction used to bounce the prediction line off cushions up to
+    // this many times, which drew a cushion-reflection prediction that isn't wanted (reflection is
+    // for ball collisions only - see the dBall < dRail branch). Left here rather than deleted so no
+    // scene loses a serialized Inspector value over a behaviour change.
+    [SerializeField] private int maxReflectionBounces = 3;
+    [SerializeField] private float reflectionEpsilon = 0.02f;  // unused, same reason as above
     [SerializeField] private GameObject ghostBallPrefab;
     private GameObject currentGhostBall;
 
@@ -54,6 +58,7 @@ public class Cue : MonoBehaviour
     [SerializeField] private LayerMask ballLayer;
     [SerializeField] private LayerMask tableLayer;
     [SerializeField] private LayerMask pocketLayer;
+    // Unused since cushion/pocket hits no longer bounce the prediction line - see maxReflectionBounces.
     [SerializeField] private bool stopAtPockets = true;
 
     [Tooltip("Read from SphereCollider if <= 0")]
@@ -258,17 +263,8 @@ public class Cue : MonoBehaviour
         Vector3 currentOrigin = origin;
         Vector3 currentDir = dir;
         float remainingDistance = maxDistance;
-        int bounces = 0;
 
-        // helper to test if a RaycastHit is a pocket by layer
-        bool IsPocket(RaycastHit h)
-        {
-            if (h.collider == null) return false;
-            int hitLayerMask = 1 << h.collider.gameObject.layer;
-            return (pocketLayer.value & hitLayerMask) != 0;
-        }
-
-        while (remainingDistance > 0f && bounces <= maxReflectionBounces)
+        while (remainingDistance > 0f)
         {
             // 1) check ball along this segment
             RaycastHit ballHit;
@@ -355,35 +351,16 @@ public class Cue : MonoBehaviour
             }
             else if (hasRail)
             {
+                // The reflection prediction is for ball collisions only (see the dBall < dRail branch
+                // above, which already draws the post-contact cue-ball direction) - a cushion or pocket
+                // hit just ends the line here with no bounce. This used to reflect and keep extending
+                // the line off the rail (up to maxReflectionBounces times), which drew a predicted
+                // cushion-bounce path that was never wanted.
                 Vector3 rp = railHit.point;
                 rp.y = tableY;
                 aimPoints.Add(rp);
-
-                // If it's a pocket and we should stop at pockets, stop here.
-                if (stopAtPockets && IsPocket(railHit))
-                {
-                    break;
-                }
-
-                // Compute reflection and continue
-                Vector3 refl = Vector3.Reflect(currentDir, railHit.normal);
-                refl = Flat(refl);
-                if (refl == Vector3.zero)
-                {
-                    // can't continue predictably
-                    break;
-                }
-
-                // Move origin slightly along reflection to avoid immediately hitting the same collider
-                currentOrigin = railHit.point + refl * reflectionEpsilon;
-                currentOrigin.y = origin.y; // keep same height for flattened prediction
-
-                // reduce remaining distance by distance consumed
-                remainingDistance -= (dRail + reflectionEpsilon);
-
-                currentDir = refl;
-                bounces++;
-                continue;
+                if (currentGhostBall != null) currentGhostBall.SetActive(false);
+                break;
             }
             else
             {

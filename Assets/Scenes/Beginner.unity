@@ -3224,12 +3224,12 @@ MonoBehaviour:
   cueElevationDegrees: 10
   aimLineCue: {fileID: 322264290}
   aimLineObject: {fileID: 1221921396}
-  maxDistance: 10
-  maxNoHitLength: 6
+  maxDistance: 60
+  maxNoHitLength: 8
   maxReflectionBounces: 4
   reflectionEpsilon: 0.02
   ghostBallPrefab: {fileID: 4859117898261897200, guid: c4edfd66c77bdcd4c9542a82dfb192c4, type: 3}
-  contactStubLength: 3
+  contactStubLength: 5
   ballLayer:
     serializedVersion: 2
     m_Bits: 64

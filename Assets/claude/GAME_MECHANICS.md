@@ -261,3 +261,59 @@ Single function, runs once per completed shot, decision table roughly:
 5. Turn off the `debugLogging` / "TEMP DEBUG - delete after fixing" fields in
    `GameManager` and `Cue` once you're happy with behaviour — they're flagged in the
    code itself as temporary.
+
+## 11. Confirmed bugs (September 2026): the aim/prediction line
+
+`Cue.GenerateAimPrediction()` draws the white cue-ball line and, on a ball collision, the
+red object-ball line plus a white post-collision cue-deflection stub — that ball-collision
+reflection was and is correct. Two separate problems, both fixed:
+
+- **Ray fell short on far targets.** All three scenes' `Cue` component had `maxDistance`
+  set to `10`, `maxNoHitLength` to `6`, and `contactStubLength` to `3` in the Inspector -
+  literally about half the table's own diagonal (`~20.7`, see `playAreaMin`/`playAreaMax`
+  in `GameManager`). Any target ball farther than ~10 units in a straight line was never
+  found by the `SphereCast`, and the "no hit" fallback path capped the line even shorter
+  via `contactStubLength`. The calculation itself was correct; only the Inspector values
+  were wrong. Restored to the script's own defaults (`60` / `8` / `5`, comfortably larger
+  than the table) in all three scenes. Verified live: an isolated 17.49-unit shot across
+  the table (previously impossible to even detect) now correctly finds and reaches the
+  target ball.
+- **Cushion/pocket hits predicted a bounce that wasn't wanted.** The `hasRail` branch used
+  to reflect the ray off the cushion normal and keep extending the line (up to
+  `maxReflectionBounces` times) before falling through to the "stopped at a pocket" case -
+  this drew a predicted post-cushion-bounce path, which the reflection line is not meant to
+  show (it's for what happens after hitting the *object ball*, not a cushion). Fixed by
+  making any rail/pocket hit end the line right there, unconditionally - no reflection, no
+  further bounces. `maxReflectionBounces`/`reflectionEpsilon`/`stopAtPockets` are now
+  unread by this method (left declared - serialized Inspector values, harmless to keep).
+  Verified live: aiming straight at a cushion with nothing else on the table now produces
+  exactly 2 line points (start + cushion contact, no third bounce point), while a genuine
+  cut shot on a ball still produces the correct 3-point line (start, contact, post-collision
+  deflection stub) exactly as before.
+
+## 12. Investigated but NOT shipped (September 2026): Pro playing safe too often on medium pots
+
+Asked to make Pro attempt pots more aggressively from the opening exchanges rather than
+laying safe or breaking so often. Traced the likely mechanism: `ChooseShot()` rolls a
+`safetyProbability` chance (Pro: 40-55%) to lay safe instead of potting whenever the best
+candidate's `potScore` is below `safetyRollPotScore` (0.4) - measured directly (isolated,
+fixed geometry, 200-300 repeated trials) that Pro was laying safe on an already-*makeable*
+potScore~0.28 pot roughly half the time. Narrowing this (`safetyProbability` 0.4-0.55 ->
+0.15-0.25, `safetyRollPotScore` 0.4 -> 0.3) cut that to ~20% in the same isolated test, as
+intended.
+
+However, a controlled full-game A/B (same table-layout seed AND `UnityEngine.Random.InitState`
+seed for both runs, only the two settings above changed) showed the *aggregate* pot-attempt
+fail rate rising from ~13% to ~20-22% with the narrower settings, not staying flat - pots in
+this potScore band are, empirically, meaningfully more failure-prone even though they pass
+the same `IsMakeableAtThisSkill` gate as easier pots, and the safety roll was doing real
+accuracy-preserving work, not just adding flavour. Since the user explicitly required
+potting accuracy not be reduced to chase more aggression, this change was reverted and NOT
+shipped - `ProAI.asset` is unchanged (`safetyProbability: {0.4, 0.55}`,
+`safetyRollPotScore: 0.4`). Also checked and ruled out: the fresh/tight-rack case
+(`PackIsTight`) already correctly finds zero geometric candidates and plays a firm break,
+not a passive safety - that path isn't the source of the perceived passivity. If this is
+revisited, it needs either a smaller nudge validated across many independent seeds (a
+single same-seed comparison is unreliable here - the first differing RNG-consuming decision
+desyncs every later shot's `UnityEngine.Random` draws between the two runs, sample size
+needs to be seed-averaged) or a genuinely different, zero-accuracy-cost mechanism.
