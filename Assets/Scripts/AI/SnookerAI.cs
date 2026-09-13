@@ -36,7 +36,11 @@ public class SnookerAI : MonoBehaviour
 
     [Tooltip("Power fraction for the break shot - the firm hit into a still-racked pack when there is " +
              "nothing on. A soft safety here just taps the pack and hands back the same position.")]
-    [SerializeField] private float breakPowerFraction = 0.65f;
+    // 0.35 puts the cue ball around 7.6 m/s, roughly 18 units of travel - enough to reach the pack
+    // from the D and spread it. 0.65 measured 13.7 m/s, about 33 units on a 16.6-unit table, so the
+    // ball crossed twice and ricocheted; that read as "the balls are moving much faster now" once the
+    // targetState fix stopped the AI being stuck on Colour and let it actually play break shots.
+    [SerializeField] private float breakPowerFraction = 0.35f;
 
     [Header("Shot selection margins")]
     [Tooltip("Extra room, as a fraction of the ball radius, the AI insists on down a shot line before " +

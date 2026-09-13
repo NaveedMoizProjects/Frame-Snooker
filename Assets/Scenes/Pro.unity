@@ -8708,7 +8708,7 @@ MonoBehaviour:
   basePowerFraction: 0.1
   powerPerTableDiagonal: 0.35
   safetyPowerMultiplier: 0.8
-  breakPowerFraction: 0.65
+  breakPowerFraction: 0.35
   sightMarginBallRadii: 0.25
   powerFractionLimits: {x: 0.06, y: 0.85}
   debugLogging: 1
