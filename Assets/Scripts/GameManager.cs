@@ -164,10 +164,14 @@ public class GameManager : MonoBehaviour
 
     // Shows the manually-built panel exactly when NeedsColourNomination is true, hides it
     // otherwise. Called from Awake's OnTargetChanged subscription and once at Start.
+    // The picker panel is no longer how a colour gets nominated - the player clicks the actual
+    // ball on the table instead (ColourBallClickTarget), reflected on the Canvas by
+    // SelectedColourIndicator. Kept as a permanently-hidden method rather than removing the field
+    // and every reference to it.
     private void RefreshColourNominationPanel()
     {
         if (colourNominationPanel != null)
-            colourNominationPanel.SetActive(NeedsColourNomination);
+            colourNominationPanel.SetActive(false);
     }
 
     public void Cam1() => cameraSwitching?.SwitchToTopDownCamera();

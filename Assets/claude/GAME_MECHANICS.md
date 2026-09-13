@@ -196,33 +196,39 @@ Single function, runs once per completed shot, decision table roughly:
 
 - `ScoreboardUI` — subscribes to `OnScoreChanged` / `OnTurnChanged`, purely reactive,
   manual `TextMeshProUGUI` references (no runtime building).
-- **Colour nomination flow (spec — replaces the previous "check for duplicate UI" flag).**
-  `GameManager`'s own `Awake()` comment claims its manual panel replaces
-  `ColourNominationUI` entirely; keep only ONE active nomination UI in the scene (remove
-  or disable the other), and it must behave exactly like this:
-  1. The moment a red is legally potted (`GameManager.NeedsColourNomination` becomes
-     `true`), show a panel with all 6 colour buttons (Yellow, Green, Brown, Blue, Pink,
-     Black) — reuse `ColourNominateButton` for each, passthrough to
-     `GameManager.OnColourNominated` is already correct and doesn't need to change.
-  2. The instant the player taps one button: call `OnColourNominated(colour)` (sets
-     `CurrentTargetColour`), then **collapse/hide the 6-button picker** and instead show a
-     small confirmation label on the canvas, e.g. `"Black selected"` /
-     `"Yellow selected"` — reuse the existing `statusLabel` /
-     `BuildStatusText()`-style pattern already present, just make sure it's actually
-     visible and updates immediately on selection rather than only reflecting state on
-     the next `OnTargetChanged` tick.
-  3. This label stays visible through aiming/strike so the player has a clear reminder of
-     which ball is "on." `Confirm`/`RequestStrike()` should remain blocked
-     (`NeedsColourNomination` gate, already correct in `ConfirmButtonPressed()`) until a
-     colour has been picked — no code change needed there, just confirm it still holds
-     once the UI is consolidated.
-  4. No new foul logic is needed here — hitting a ball other than the nominated colour
-     first is already a correctly-implemented foul (see
-     `docs/SCORING_FOUL_HITTING_AUDIT.md` item B5). This section is purely about making
-     the selection and the "which ball is on" state clearly visible to the player, not
-     about changing what counts as a foul.
-- `ColourNominateButton` — one per colour button, straightforward passthrough to
-  `GameManager.OnColourNominated`. No changes needed to this script itself.
+- **Colour nomination flow (September 2026: replaced the button-panel picker).** Both
+  `GameManager.colourNominationPanel` and `ColourNominationUI`'s own `nominationPanel`
+  (wired to the same `ColourSlectionPanel` GameObject, holding six `ColourNominateButton`s)
+  used to pop the panel open the instant `NeedsColourNomination` became `true`. The player
+  found this intrusive, so both `RefreshColourNominationPanel()` (`GameManager.cs`) and
+  `RefreshPanelVisibility()` (`ColourNominationUI.cs`) now force the panel permanently
+  hidden instead of toggling it - the panel GameObject and its six buttons are still in
+  the scene (nothing deletes them, in case anything else ever references them) but nothing
+  activates them anymore.
+  1. Nomination now happens by **clicking the actual coloured ball on the table**:
+     `ColourBallClickTarget` (new script, one instance on each of Yellow/Green/Brown/
+     Blue/Pink/Black in every scene) uses Unity's built-in `OnMouseDown()` message - no
+     extra raycaster needed, since the balls already carry `SphereCollider`s for physics -
+     and calls `GameManager.OnColourNominated(identity.Type)` unconditionally. The method's
+     own guards (`targetState != Colour`, reds still on table, `BlockedAsHumanInputDuringAiTurn`)
+     already correctly no-op a click at the wrong moment, so no extra gating was needed
+     in the new script itself.
+  2. **`SelectedColourIndicator`** (new script, one instance per scene: a small circular
+     `Image` - Unity's built-in `UI/Skin/Knob.psd` sprite - parked top-left of the Canvas)
+     replaces the panel's old status-label job: it subscribes to `GameManager.OnTargetChanged`
+     and recolours itself to the nominated ball's real colour the instant a click (or the
+     AI's own internal nomination) sets one, falling back to a dim near-transparent white
+     when on Red or nothing's picked yet. `raycastTarget` is off so it never blocks clicks
+     to whatever's behind it.
+  3. `Confirm`/`RequestStrike()` are still correctly blocked by the existing
+     `NeedsColourNomination` gate in `ConfirmButtonPressed()` until a colour is chosen -
+     untouched, still works the same regardless of how the colour gets picked.
+  4. No foul-logic change - hitting a ball other than the nominated colour first is still
+     the existing correct foul (see `docs/SCORING_FOUL_HITTING_AUDIT.md` item B5).
+- `ColourNominateButton` — still exists on the now-permanently-hidden panel buttons,
+  unreachable in normal play. Left as-is (dead code, not deleted) rather than ripped out,
+  since nothing calls it anymore and deleting it risks breaking anything that still
+  references those GameObjects.
 - `ShotPowerSlider` — only interactable in confirm mode + when balls aren't moving;
   fires the shot on pointer-up at whatever power the slider was left at.
 - `CameraSwitching` — three Cinemachine cameras (top-down / third-person /
@@ -258,9 +264,9 @@ Single function, runs once per completed shot, decision table roughly:
    `GameManager` already drives its own panel.
 4. Set ball Rigidbodies to `Continuous Dynamic` collision detection to rule out
    tunneling through cushions at higher strike forces.
-5. Turn off the `debugLogging` / "TEMP DEBUG - delete after fixing" fields in
-   `GameManager` and `Cue` once you're happy with behaviour — they're flagged in the
-   code itself as temporary.
+5. ~~Turn off the `debugLogging` / "TEMP DEBUG - delete after fixing" fields in
+   `GameManager` and `Cue` once you're happy with behaviour~~ — **done September 2026**,
+   see §13. `SnookerAI.debugLogging` included, same reason.
 
 ## 11. Confirmed bugs (September 2026): the aim/prediction line
 
@@ -317,3 +323,40 @@ revisited, it needs either a smaller nudge validated across many independent see
 single same-seed comparison is unreliable here - the first differing RNG-consuming decision
 desyncs every later shot's `UnityEngine.Random` draws between the two runs, sample size
 needs to be seed-averaged) or a genuinely different, zero-accuracy-cost mechanism.
+
+## 13. Confirmed bug (September 2026): a real under-powered-cut bug, and a real perf cost
+
+Two separate fixes from the same round, reported together because both came from the same
+"potting accuracy is poor / uses too many resources" complaint.
+
+**Power fix (`SnookerAI.PotPowerFor`).** The cut-angle cosine term was floored at 0.35
+(`Mathf.Max(0.35f, Mathf.Cos(cutAngle))`), well above `cos(MaxCutAngleDegrees) = cos(85) =
+0.087` - meaning every real, legal candidate cut thinner than about 69 degrees had its
+needed impact speed computed off 0.35 instead of its own actual (smaller) cosine, which
+*understates* the needed power since it's the divisor. Measured directly: at 75 degrees
+that's a power-fraction shortfall of about 0.17, at 80 degrees about 0.50, at 85 degrees
+over 1.0 (i.e., the old code asked for barely any extra power at all for the hardest
+legal cuts) - exactly "tries to pot, runs out of speed, stops short of the jaw," and it
+landed on exactly the thin-cut shots already known to fail most (§12, and the earlier
+[[project-thin-cut-variance-finding]] investigation - some of what that round called
+"unfixable variance" was actually this). Floor lowered to 0.05 (just below `cos(85)`, so
+it still only guards against a literal near-zero divide, never bites within the legal cut
+range). The overall `powerFractionLimits.y` clamp already existing in the same method
+still caps the very thinnest cuts at max power rather than letting the formula demand
+something absurd. Verified live over ~470 attempts post-fix: no attempt-volume regression
+(mean pots/visit held at ~3.4-3.9) and the fail rate stayed in the same broad band as
+recent rounds (~13-16%) - thin cuts (50+ deg) are still a small fraction of attempts
+(~1-3%) so this specific fix's effect doesn't move the aggregate number by much on its
+own, but it is an unambiguous correctness fix (the old value was measurably, provably
+wrong for legal candidates), not a tuning guess, so it's kept regardless.
+
+**Performance fix.** `debugLogging` was left `true` by default on `GameManager`, `Cue`,
+and `SnookerAI` in all three shipped scenes - §10 item 5 flagged turning this off as a
+to-do since early in the project and it had never been done. With it on, every single AI
+pot attempt spins up `SnookerAI.TrackPotAttempt`, a coroutine that runs extra ball-velocity
+scans on every `FixedUpdate` tick for the attempt's whole duration (up to 20s if a shot
+never resolves) purely to produce a debug comparison log line nobody in a real game session
+reads. Set to `false` in all three scenes now; the capability itself is untouched (still
+flip it on in the Inspector, or via `SerializedObject` in a test harness, for any future
+debugging session - this is exactly how this project's own test harnesses already turn it
+back on temporarily).

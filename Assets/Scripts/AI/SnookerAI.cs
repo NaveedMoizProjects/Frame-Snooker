@@ -482,7 +482,15 @@ public class SnookerAI : MonoBehaviour
     private float PotPowerFor(ShotCandidate c)
     {
         float objectSpeedSq = 2.1f * (c.objectToPocket + 1.5f);
-        float cos = Mathf.Max(0.35f, Mathf.Cos(c.cutAngle * Mathf.Deg2Rad));
+        // Confirmed bug (September 2026): this floor was well above cos(MaxCutAngleDegrees) = cos(85) =
+        // 0.087, so every candidate this thin (a real, legal, sub-85deg cut - not a hypothetical) had its
+        // needed impact speed silently computed off 0.35 instead of its own actual cosine. At 75deg that's
+        // a 0.17 power-fraction shortfall, at 80deg 0.50, at 85deg over 1.0 - the exact "tries to pot, runs
+        // out of speed and stops near the jaw" symptom, and it landed hardest on exactly the thin/high-cut
+        // shots already measured to fail most (see AI_SHOT_SELECTION.md). The floor only needs to stop a
+        // literal division blow-up as cutAngle approaches 90 (never reachable - candidates are already
+        // rejected past MaxCutAngleDegrees), not shave real power off every legal thin cut.
+        float cos = Mathf.Max(0.05f, Mathf.Cos(c.cutAngle * Mathf.Deg2Rad));
         float impactSq = objectSpeedSq / (cos * cos);
         float atOneUnitSq = impactSq + 3.6f * Mathf.Max(0f, c.cueToGhost - 1f);
 

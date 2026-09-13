@@ -110,10 +110,14 @@ public class ColourNominationUI : MonoBehaviour
             return $"{gameManager.CurrentTargetColour.Value} selected";
         return "Ball on: Colour";
     }
+    // The picker panel is no longer the way to nominate a colour - the player clicks the actual
+    // ball on the table instead (see ColourBallClickTarget), shown via SelectedColourIndicator on
+    // the Canvas. Kept as a permanently-hidden method (rather than deleting the panel/this call)
+    // so nothing else that references nominationPanel breaks.
     private void RefreshPanelVisibility()
     {
         if (nominationPanel != null)
-            nominationPanel.SetActive(gameManager.NeedsColourNomination);
+            nominationPanel.SetActive(false);
     }
     private void RefreshButtonHighlights()
     {
