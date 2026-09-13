@@ -153,6 +153,20 @@ Measured in Play mode through the real pipeline, not assumed:
   power under-hit cut pots, which stopped 1.3–2.7 units short. `PotPowerFor` works back from
   the object ball reaching the pocket with room to spare, allowing for the level's worst
   under-hit.
+- **Pot pace is capped, and is separate from `basePowerFraction`.** Pots are paced only from what
+  the object ball needs, not from the safety/escape power mapping. Position play's extra pace (×1.3,
+  ×1.6) is capped so the cue ball arrives at no more than 6.5 m/s, unless the pot genuinely needs
+  more. Measured on 137 logged pots: under 6 m/s none failed and the object ball left within a median
+  0.4–0.8° of the plan. Above 11 m/s the median launch error was 3.6° and 14 of 52 failed, with no ball
+  touched first. The collision itself stops being predictable at that pace. (Pro's scene briefly had
+  `basePowerFraction` 0.8, which drove every pot to that speed: 27% of pot attempts failed, against
+  8% with spec power and the cap.)
+- **Sight margin near clusters.** `sightMarginBallRadii` stays at 0.25. With the clearance logging
+  below, no run showed misses concentrating on shots with a tight gap beside the line, and no failure
+  started with the object ball clipping a neighbour. The AI hardly ever takes a pot on a red inside a
+  cluster, because the existing line checks already reject those. Raising the margin to 0.75 on Pro gave
+  3/69 failures against 6/75, but the misses it removed were not tight-gap shots, and pots per visit
+  fell slightly (0.89 → 0.84).
 - **Cue-ball rest** (§5.1) is fitted to 18 real strikes rather than a guess: the old estimate put
   a 60° cut's cue ball 0.9 units away when it travelled 4.6.
 - **Side spin is not used on pots yet.** Side spin bends the cue ball's path (squirt/swerve), and
@@ -164,7 +178,12 @@ Measured in Play mode through the real pipeline, not assumed:
   pot they see and miss naturally, as §5 and the Beginner row in `AI_DIFFICULTY_LEVELS.md` describe.
 - **Debug tracking.** With `debugLogging` on, every pot attempt logs the predicted vs actual
   object-ball direction, how close it got to the pocket, and how far the cue ball stopped from
-  the predicted rest.
+  the predicted rest. It also logs how much room each shot line had (`gaps cue->ghost=… obj->pocket=…`,
+  the gap left beside the travelling ball by the nearest other ball, in ball radii), how many balls sit
+  within three ball widths of the object ball (`cluster3D`), and which ball, if any, the cue ball or
+  object ball actually ran into (`contacts: …`). That separates a secondary collision from a bad
+  contact. The "actual objDev" is read two physics steps after the object ball starts moving. A large
+  value with no contact listed was already off at launch, not knocked off by a neighbour.
 
 ## 7. Ball-in-hand placement (opening shot / after a foul)
 

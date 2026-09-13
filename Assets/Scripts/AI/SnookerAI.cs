@@ -26,9 +26,10 @@ public class SnookerAI : MonoBehaviour
     [SerializeField] private Vector2 thinkingDelaySeconds = new Vector2(0.5f, 1.5f);
 
     [Header("Power mapping")]
-    [Tooltip("Power fraction for a shot with no distance to cover at all.")]
+    [Tooltip("Power fraction for a safety or escape with no distance to cover at all. Pots are paced " +
+             "separately, from what the object ball needs to reach the pocket (PotPowerFor).")]
     [SerializeField] private float basePowerFraction = 0.10f;
-    [Tooltip("Extra power fraction per full table diagonal the ball has to travel.")]
+    [Tooltip("Extra power fraction per full table diagonal a safety or escape has to travel.")]
     [SerializeField] private float powerPerTableDiagonal = 0.35f;
     [Tooltip("Safeties are played at this fraction of the power the same distance would normally get. " +
              "Below about 0.5 the cue ball stops short of the ball on, which is a foul, not a safety.")]
@@ -49,6 +50,9 @@ public class SnookerAI : MonoBehaviour
     // 0.25 is deliberate: the break-off line that used to graze the pink had 0.045 units of room,
     // which is 0.23 ball radii, so this still rejects it - while 0.5 was throwing away half the
     // legitimate candidates on a cluttered table (measured 6 -> 3 on one mid-frame position).
+    // Re-checked for general play near a red cluster (logged gaps per shot, ~400 pots): misses did not
+    // concentrate on tight-gap lines and none began with the object ball clipping a neighbour - the big
+    // off-line launches were pace (see MaxControlledImpactSpeed) - so 0.25 still holds.
     [SerializeField] private float sightMarginBallRadii = 0.25f;
     [SerializeField] private Vector2 powerFractionLimits = new Vector2(0.06f, 0.85f);
 
@@ -462,7 +466,27 @@ public class SnookerAI : MonoBehaviour
         float atOneUnitSq = impactSq + 3.6f * Mathf.Max(0f, c.cueToGhost - 1f);
 
         float needed = Mathf.Sqrt(atOneUnitSq) / 21.6f * (1f + profile.powerErrorPercent * 0.01f);
-        return Mathf.Clamp(Mathf.Max(PowerFor(c.span), needed), powerFractionLimits.x, powerFractionLimits.y);
+        // Paced off what the pot needs alone, not PowerFor: tying pots to basePowerFraction meant the only
+        // way to firm them up was to inflate it, which also blasts every safety and escape. Pots measured
+        // at spec power were never short; the misses were pots struck too hard (below).
+        return Mathf.Clamp(needed, powerFractionLimits.x, Mathf.Max(powerFractionLimits.x, ControlledPotPowerCeiling(c.cueToGhost, needed)));
+    }
+
+    // The collision stops being predictable once the cue ball arrives much faster than the throw fit was
+    // measured at (up to 6.7 m/s). From 137 logged pots on cluster tables: under 6 m/s the object ball left
+    // within a median 0.4-0.8 degrees of the plan and none failed; at 6-8 m/s 4 of 25 failed, 8-11 5 of 20,
+    // and above 11 m/s the median launch error was 3.6 degrees and 14 of 52 failed - with no ball touched
+    // first, so the extra pace itself was sending the ball off line. The ceiling keeps pot pace (position
+    // play's extra pace included) at or under that speed, allowing for this level's worst over-hit. A pot
+    // that genuinely needs more still gets it; makeability then judges it at that pace.
+    private const float MaxControlledImpactSpeed = 6.5f;
+
+    private float ControlledPotPowerCeiling(float cueToGhost, float needed)
+    {
+        // Inverse of ImpactSpeed for a firm stroke (speed squared falling ~4 per unit).
+        float atOneUnit = Mathf.Sqrt(MaxControlledImpactSpeed * MaxControlledImpactSpeed + 4f * Mathf.Max(0f, cueToGhost - 1f));
+        float ceiling = atOneUnit / 21.6f / (1f + profile.powerErrorPercent * 0.01f);
+        return Mathf.Min(powerFractionLimits.y, Mathf.Max(ceiling, needed));
     }
 
     // A safety is soft, but it still has to arrive - a cue ball that stops short of the ball on is a
@@ -629,9 +653,14 @@ public class SnookerAI : MonoBehaviour
         Vector2 best = Vector2.zero;
         float bestPower = basePower;
         float bestScore = float.NegativeInfinity;
+        float paceCeiling = ControlledPotPowerCeiling(candidate.cueToGhost, basePower);
+        float lastPower = -1f;
         foreach (float scale in PositionPowerScales)
         {
-            float power = Mathf.Clamp(basePower * scale, powerFractionLimits.x, powerFractionLimits.y);
+            float power = Mathf.Clamp(basePower * scale, powerFractionLimits.x, paceCeiling);
+            // Once the ceiling caps the extra pace, the next scale is the same shot again.
+            if (power <= lastPower + 0.005f) continue;
+            lastPower = power;
             foreach (var spin in options)
             {
                 // Side spin bends the cue ball's path (squirt/swerve) and nothing here models that yet:
