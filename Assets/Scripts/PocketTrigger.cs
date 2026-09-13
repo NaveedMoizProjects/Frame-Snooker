@@ -18,6 +18,11 @@ public class PocketTrigger : MonoBehaviour
         Rigidbody rb = other.attachedRigidbody;
         if (rb == null) return;
 
+        // Only actual balls can be potted. Several cushion/collider objects in the scenes also carry
+        // Rigidbodies, and without this they fall into the pockets at frame start and GameManager
+        // deactivates them - taking chunks of the cushion with them, so balls then escape the table.
+        if (rb.GetComponent<BallIdentity>() == null) return;
+
         if (GameManager.Instance != null)
             GameManager.Instance.OnBallPotted(rb);
         else

@@ -21,6 +21,11 @@ public class ShotPowerSlider : MonoBehaviour, IPointerUpHandler
 
     private Slider slider;
 
+    // SnookerAI converts its 0-1 power choice into a force through the same two numbers the human's
+    // slider uses, so the AI cannot reach a power the player can't.
+    public float MinPower => minPower;
+    public float MaxPower => maxPower;
+
     void Awake()
     {
         slider = GetComponent<Slider>();
