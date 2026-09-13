@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6fb00b2500e85df4a895a8f0763a13f4, type: 3}
   m_Name: ProAI
   m_EditorClassIdentifier: 
-  aimErrorDegreesEasy: {x: 0.3, y: 0.6}
-  aimErrorDegreesHard: {x: 1, y: 1.5}
+  aimErrorDegreesEasy: {x: 0.01, y: 0.03}
+  aimErrorDegreesHard: {x: 0.02, y: 0.06}
   easyPotScore: 0.8
   hardPotScore: 0.3
-  aimErrorDegreesPerBallPotted: 0.1
+  aimErrorDegreesPerBallPotted: 0.003
   powerErrorPercent: 4
   powerErrorFloorFraction: 0.2
   minAcceptablePotScore: 0.2

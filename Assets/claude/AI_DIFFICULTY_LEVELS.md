@@ -5,6 +5,53 @@ Feeds the shared algorithm in `AI_SHOT_SELECTION.md`. Implement as a `Scriptable
 in each of the three scenes (`Beginner.unity`, `Medium.unity`, `Pro.unity`) — same script,
 different data, so tuning is just editing numbers, not duplicating code three times.
 
+## Measured table scale — why the aim-error numbers below are tenths of a degree, not degrees
+
+The original values in this doc (Beginner 4–8°, Medium 1.5–3°, Pro 0.3–1.5°) were real-world
+intuition. They were measured against this table in Play mode and cannot work here:
+
+- **Contact amplification.** A cue-ball aim error is multiplied at the contact by roughly
+  `cueToGhost / (ballDiameter · cos(cut))`. Measured at a 45° cut from 5 units: −19.9° of
+  object-ball error per 1° of aim error (the model predicts −20.05°). A 0.2° aim error there is
+  a 4° miss on the object ball.
+- **Pocket jaws.** Rolled balls show a corner pocket only accepts approaches within about ±15°
+  of its diagonal and ±0.25 units of the line; middle pockets about ±40°.
+- **Collision throw.** Even with zero aim error, the object ball leaves 1.4–7.8° off the ghost-
+  ball line on cut shots (it grows with cut angle and impact speed). The AI compensates, but
+  roughly ±0.4–2° is left over, so cut pots stay less reliable than straight ones at every level.
+  This traces to the physics contact offset (0.02) and affects human players too.
+- **Availability ceiling.** Over 60 random open layouts, a pot that survives the shot model
+  exists in 83% of positions at 0.01° aim error, 73% at 0.08°, 62% at 0.14°, and 50% at 0.25°.
+  No aim-error value gets "every visit" above that ceiling; the remaining visits start with no
+  reliably makeable pot at all.
+
+So the levels keep the same *shape* (floor > 0, Pro < Medium < Beginner, Pro's error grows on
+hard pots) at the scale this table actually needs. The shot pipeline was fixed first (see
+`AI_SHOT_SELECTION.md` §3.1 and §6.1) — these numbers were only tuned after that.
+
+| Level | `aimErrorDegrees` (this table) |
+|---|---|
+| Beginner | `[0.06°, 0.18°]` |
+| Medium | `[0.04°, 0.12°]` |
+| Pro | `[0.01°, 0.03°]` easy → `[0.02°, 0.06°]` hard, `+0.003°` per ball potted this visit |
+
+Wherever the tables below still quote the original degree values, read them as the intent
+(relative ordering and shape), and the table above as the numbers actually shipped.
+
+**Measured status (September 2026, each AI visit started from a fresh random open table, human
+deliberately missing).**
+
+| Level | Visits | Balls per visit (mean) | Visits with 3+ | Pot attempts dropped |
+|---|---|---|---|---|
+| Medium, before this pass | 823 | 0.27 | 0.5% | ≈40% |
+| Beginner | 26 | 0.92 | 12% | 16/21 (misses on pots it knew weren't makeable) |
+| Medium | 42 | 1.55 | 26% | 96% |
+| Pro | 442 | 2.08 | 33% (5+: 16%) | 95% |
+
+The per-visit minimums below are **not yet met on every visit**. Nearly all zero visits start
+with no makeable pot on the table (the availability ceiling above), not with a miss. The
+biggest remaining lever is the physics throw noise, tracked as a separate follow-up.
+
 ## Golden rule for all three levels
 
 **No level ever has zero error and no level ever has zero pot chance.** Every level keeps

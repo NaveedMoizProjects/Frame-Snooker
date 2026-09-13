@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6fb00b2500e85df4a895a8f0763a13f4, type: 3}
   m_Name: MediumAI
   m_EditorClassIdentifier: 
-  aimErrorDegreesEasy: {x: 1.5, y: 3}
-  aimErrorDegreesHard: {x: 1.5, y: 3}
+  aimErrorDegreesEasy: {x: 0.04, y: 0.12}
+  aimErrorDegreesHard: {x: 0.04, y: 0.12}
   easyPotScore: 0.8
   hardPotScore: 0.3
   aimErrorDegreesPerBallPotted: 0

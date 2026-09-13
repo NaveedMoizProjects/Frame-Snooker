@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6fb00b2500e85df4a895a8f0763a13f4, type: 3}
   m_Name: BeginnerAI
   m_EditorClassIdentifier: 
-  aimErrorDegreesEasy: {x: 0.8, y: 1.6}
-  aimErrorDegreesHard: {x: 0.8, y: 1.6}
+  aimErrorDegreesEasy: {x: 0.06, y: 0.18}
+  aimErrorDegreesHard: {x: 0.06, y: 0.18}
   easyPotScore: 0.8
   hardPotScore: 0.3
   aimErrorDegreesPerBallPotted: 0
