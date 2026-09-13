@@ -53,6 +53,11 @@ public class GameManager : MonoBehaviour
     [Tooltip("Shown while the player is placing the cue ball in the D: prompt label + a tick button wired to ConfirmPlacement.")]
     [SerializeField] private GameObject placementPanel;
 
+    [Header("Foul Play/Play-Again Decision (FOUL_PLAY_AGAIN_RULE.md)")]
+    [Tooltip("Shown while IsAwaitingFoulDecision is true: Play / Make opponent play again buttons, " +
+             "wired to ChooseFoulPlay/ChooseFoulPlayAgain.")]
+    [SerializeField] private GameObject foulDecisionPanel;
+
     [Header("TEMP DEBUG - delete after fixing")]
     [SerializeField] private bool debugLogging = true;
     private float debugLogTimer2 = 0f;
@@ -64,6 +69,15 @@ public class GameManager : MonoBehaviour
     private bool inputLocked = false;
     private bool frameOver = false;
     private bool awaitingPlacement = false;
+
+    // FOUL_PLAY_AGAIN_RULE.md section 2: after any foul, the non-offending player (this index)
+    // decides whether to play on or send the fouling player back in, before any placement-in-D
+    // or normal-aim flow starts. foulDecisionCueBallPotted remembers whether ball-in-hand should
+    // follow once the decision resolves, since it applies to whichever player ends up actually
+    // playing next, not necessarily foulDecisionForPlayerIndex.
+    private bool awaitingFoulDecision = false;
+    private int foulDecisionForPlayerIndex = -1;
+    private bool foulDecisionCueBallPotted = false;
 
     // Which player index (if any) is AI-controlled, and whether the AI is mid-way through taking its
     // own shot right now. Registered by SnookerAI.Start(); used only to stop a human's own UI input
@@ -299,7 +313,7 @@ public class GameManager : MonoBehaviour
     public bool IsConfirmMode => confirmMode;
     public bool IsStrikeRequested => strikeRequested;
     // Placement replaces normal aiming input entirely, so it locks the cue the same way confirm does.
-    public bool IsInputLocked => inputLocked || awaitingPlacement;
+    public bool IsInputLocked => inputLocked || awaitingPlacement || awaitingFoulDecision;
 
     // Called by the single on-screen button.
     // First press enters Confirm mode (locks input). Second press requests the strike.
@@ -320,6 +334,14 @@ public class GameManager : MonoBehaviour
         if (!nextplay)
         {
             Debug.Log("Cannot confirm while balls are moving.");
+            return;
+        }
+
+        // FOUL_PLAY_AGAIN_RULE.md section 2: the non-offending player must decide play vs
+        // play-again before any normal aim/Confirm flow starts.
+        if (awaitingFoulDecision)
+        {
+            Debug.Log("Cannot confirm: a foul decision (play or play-again) is pending.");
             return;
         }
 
@@ -368,7 +390,7 @@ public class GameManager : MonoBehaviour
     // currently in progress or just finished" - exactly what section 4 of the doc needs.
     public void RequestStrike()
     {
-        if (frameOver || awaitingPlacement) return;
+        if (frameOver || awaitingPlacement || awaitingFoulDecision) return;
         if (BlockedAsHumanInputDuringAiTurn) return;
 
         // Requesting a strike only makes sense once Confirm has actually locked the shot in - Cue.cs
@@ -419,7 +441,7 @@ public class GameManager : MonoBehaviour
     // confirmed, and clamped inside 85% of the ball so the outer (miscue) ring is unreachable.
     public void SetSpinOffset(Vector2 offset)
     {
-        if (confirmMode || awaitingPlacement) return;
+        if (confirmMode || awaitingPlacement || awaitingFoulDecision) return;
         spinOffset = Vector2.ClampMagnitude(offset, MaxSpinRadius);
     }
 
@@ -1037,16 +1059,70 @@ public class GameManager : MonoBehaviour
         else
         {
             lastShotWasFoul = true;
-            AwardPoints(OpponentIndex, points);
+            int pointsAwardedTo = OpponentIndex;
+            AwardPoints(pointsAwardedTo, points);
             PassTurn();
 
-            if (debugLogging) Debug.Log($"[GMDebug] FOUL: {points} pts to Player {OpponentIndex}.");
+            if (debugLogging) Debug.Log($"[GMDebug] FOUL: {points} pts to Player {pointsAwardedTo} - " +
+                                          $"awaiting their play/play-again decision.");
 
-            // Ball in hand is driven by the cue ball being off the table, NOT by "a foul happened"
-            // (BALL_PLACEMENT_D.md section 1, corrected rule). On every other foul - wrong ball hit
-            // first, wrong colour potted - the cue ball is still on the cloth, so the incoming player
-            // plays it from where it lies, exactly as in tournament snooker.
-            if (cueBallPotted) BeginPlacement();
+            // FOUL_PLAY_AGAIN_RULE.md: the non-offending player (now currentPlayerIndex, after
+            // PassTurn above) decides whether to play on or send the fouling player back in,
+            // BEFORE any placement-in-D or normal-aim flow starts. Ball in hand (driven by the
+            // cue ball being off the table, not by "a foul happened" - BALL_PLACEMENT_D.md
+            // section 1) is deferred until the decision resolves, since it applies to whichever
+            // player ends up actually playing next - see ChooseFoulPlay/ChooseFoulPlayAgain.
+            awaitingFoulDecision = true;
+            foulDecisionForPlayerIndex = currentPlayerIndex;
+            foulDecisionCueBallPotted = cueBallPotted;
+            RefreshFoulDecisionPanel();
         }
+    }
+
+    // ======================================================================
+    // ----- Foul Play/Play-Again Decision (FOUL_PLAY_AGAIN_RULE.md) -----
+    // ======================================================================
+
+    public bool IsAwaitingFoulDecision => awaitingFoulDecision;
+    public int FoulDecisionForPlayerIndex => foulDecisionForPlayerIndex;
+    // The player who committed the foul - only meaningful while IsAwaitingFoulDecision is true,
+    // since currentPlayerIndex is the non-offending decision-maker for that entire window.
+    public int FoulingPlayerIndex => OpponentIndex;
+
+    private void RefreshFoulDecisionPanel()
+    {
+        if (foulDecisionPanel != null)
+            foulDecisionPanel.SetActive(awaitingFoulDecision);
+    }
+
+    // "Play" - take the next shot from the table as it lies (plus placement-in-D if the cue
+    // ball was potted). Called by the human's Play button or the AI's own decision logic.
+    public void ChooseFoulPlay()
+    {
+        if (!awaitingFoulDecision) return;
+        if (BlockedAsHumanInputDuringAiTurn) return;
+
+        if (debugLogging) Debug.Log($"[GMDebug] Player {foulDecisionForPlayerIndex} chooses to PLAY.");
+        awaitingFoulDecision = false;
+        RefreshFoulDecisionPanel();
+        if (foulDecisionCueBallPotted) BeginPlacement();
+    }
+
+    // "Make [opponent] play again" - decline, sending the fouling player back in from the same
+    // position. Reuses PassTurn() to flip currentPlayerIndex back; its Colour/Red reset check is
+    // already a no-op here since the PassTurn call inside EvaluateFoul already applied it if it
+    // was going to (targetState only resets Colour -> Red once per foul, and toggling
+    // currentPlayerIndex a second time doesn't reopen that).
+    public void ChooseFoulPlayAgain()
+    {
+        if (!awaitingFoulDecision) return;
+        if (BlockedAsHumanInputDuringAiTurn) return;
+
+        if (debugLogging) Debug.Log($"[GMDebug] Player {foulDecisionForPlayerIndex} makes Player " +
+                                      $"{FoulingPlayerIndex} play again.");
+        awaitingFoulDecision = false;
+        RefreshFoulDecisionPanel();
+        PassTurn();
+        if (foulDecisionCueBallPotted) BeginPlacement();
     }
 }

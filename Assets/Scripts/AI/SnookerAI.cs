@@ -271,6 +271,16 @@ public class SnookerAI : MonoBehaviour
 
             if (!MyTurnToAct()) continue;
 
+            // FOUL_PLAY_AGAIN_RULE.md section 4: this decision happens BEFORE placement-in-D or
+            // normal aiming, and before the visit-bookkeeping below - a "play again" choice hands
+            // the turn straight back to the fouling player, so this was never really the start of
+            // an AI visit at all.
+            if (gameManager.IsAwaitingFoulDecision)
+            {
+                yield return DecideFoulPlayOrAgain();
+                continue;
+            }
+
             if (!visitActive)
             {
                 visitActive = true;
@@ -932,6 +942,41 @@ public class SnookerAI : MonoBehaviour
         // Re-aim for the spin actually chosen - topspin throws the object ball further.
         if (best.objectBall != null) CompensateForThrow(ref best);
         return true;
+    }
+
+    // ---------------------------------------------------------------- 4b. Foul play/play-again
+    // FOUL_PLAY_AGAIN_RULE.md section 4: when a human foul leaves this AI to decide, wait the same
+    // thinking pause as a normal shot, then choose Play if a genuinely makeable pot exists (the
+    // exact same candidate-generation/makeability pipeline and minAcceptablePotScore threshold a
+    // normal turn already uses to pick pot vs safety), otherwise send the fouling player back in.
+    private IEnumerator DecideFoulPlayOrAgain()
+    {
+        yield return new WaitForSeconds(Random.Range(thinkingDelaySeconds.x, thinkingDelaySeconds.y));
+        if (!gameManager.IsAwaitingFoulDecision || gameManager.CurrentPlayerIndex != aiPlayerIndex) yield break;
+
+        gameManager.SetAiActing(true);
+        bool play = HasMakeablePotAvailable();
+        if (debugLogging)
+            Debug.Log($"[AI:{profile.name}] FOUL DECISION: " +
+                      $"{(play ? "PLAY (a makeable pot exists)" : "MAKE OPPONENT PLAY AGAIN (nothing makeable)")}");
+        if (play) gameManager.ChooseFoulPlay();
+        else gameManager.ChooseFoulPlayAgain();
+        gameManager.SetAiActing(false);
+    }
+
+    // Same "is there a pot here" read the AI does at the start of every normal turn
+    // (ChooseShot/ChooseBestCandidate), consulted one step earlier, before committing to actually
+    // playing. No new difficulty-specific tuning: a stronger level naturally chooses Play more
+    // often simply because it finds makeable pots more often.
+    private bool HasMakeablePotAvailable()
+    {
+        Vector3 cueBallPos = cueBall.transform.position;
+        CollectLegalTargets(targetBuffer);
+        if (targetBuffer.Count == 0) return false;
+
+        GenerateCandidates(cueBallPos, targetBuffer, false, candidates);
+        if (!ChooseBestCandidate(out ShotCandidate best)) return false;
+        return best.potScore >= profile.minAcceptablePotScore;
     }
 
     // ---------------------------------------------------------------- 5. Pot or safety?
