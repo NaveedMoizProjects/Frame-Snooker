@@ -63,6 +63,16 @@ public class SnookerAI : MonoBehaviour
 
     private const float MaxCutAngleDegrees = 85f;
 
+    // How much of a level's own aim error (and the leftover throw scatter) a pot has to survive before
+    // the AI counts it as makeable. The full middle of the range was far too cautious: Medium dropped 80
+    // of 81 pots it attempted and ended ~85% of visits on "no makeable pot". Letting it attempt the pots
+    // that gate rejected, 65 of 91 still went in. The hardest pots a quarter of the error admits drop
+    // 53-70% of the time; everything past half the error drops 69% and up.
+    // Same seed, 60 visits each: Medium 1.37 -> 2.82 pots per visit (1.0 / 0.5 / 0.25 of the error:
+    // 1.37 / 2.40 / 2.82), Pro 2.25 -> 3.73 (5+ in 10 -> 22 of 60), with 87-89% of attempts potted.
+    // Beginner is unchanged - it never filters on this, its visits end on minAcceptablePotScore.
+    private const float MakeabilityErrorFraction = 0.25f;
+
     // Impact parameters sampled when building a safety: 0 is a full-ball hit, +/-0.85 is as thin as
     // the AI will try to clip the ball on.
     private static readonly float[] SafetyContacts = { -0.85f, -0.6f, -0.3f, 0f, 0.3f, 0.6f, 0.85f };
@@ -779,12 +789,11 @@ public class SnookerAI : MonoBehaviour
         if (toGhost.sqrMagnitude > 1e-6f) c.aimDir = toGhost.normalized;
     }
 
-    // Would this level's own aim error usually pot it? Swing the aim both ways by the middle of the
-    // error range this shot draws from, follow each through the contact (a cut multiplies the error -
-    // a 60 degree cut from five units turns a tenth of a degree into about 2.5 on the object ball) and
-    // the throw, and require both to drop past the real jaws. Gating on the middle rather than the
-    // worst case is deliberate: errors under it always pot, errors over it may not, so a tight pot is
-    // still missed a fair share of the time and the golden rule shows up at the table.
+    // Would this level's own aim error usually pot it? Swing the aim both ways by a share of the error
+    // this shot draws from, follow each through the contact (a cut multiplies the error - a 60 degree
+    // cut from five units turns a tenth of a degree into about 2.5 on the object ball) and the throw,
+    // and require both to drop past the real jaws. Errors past that share may not pot, so a tight pot
+    // is still missed some of the time and the golden rule shows up at the table.
     // The old version measured the miss against the whole pocket trigger (0.48 either side) and
     // ignored both the jaws and the cut's amplification, so it admitted long cut pots the AI could
     // never convert and visits died on them.
@@ -792,7 +801,7 @@ public class SnookerAI : MonoBehaviour
     {
         Vector2 range = profile.AimErrorRangeFor(c.potScore);
         float gateError = ((range.x + range.y) * 0.5f + profile.aimErrorDegreesPerBallPotted * ballsPottedThisVisit)
-                         * PressureMultiplier();
+                         * PressureMultiplier() * MakeabilityErrorFraction;
 
         // Real height for the jaw cast - a flattened position would sweep along the floor plane.
         Vector3 objPos = c.objectBall.position;
@@ -804,7 +813,7 @@ public class SnookerAI : MonoBehaviour
         // which steers the AI towards straighter pots where there is little to throw. (0.6x was tried
         // and left 6 of 11 visits with nothing makeable on - the misses it was meant to stop turned out
         // to be under-hit balls, fixed in PotPowerFor.)
-        float throwUncertainty = 0.2f + 0.4f * throwDegrees;
+        float throwUncertainty = (0.2f + 0.4f * throwDegrees) * MakeabilityErrorFraction;
 
         for (float sign = -1f; sign <= 1f; sign += 2f)
         {

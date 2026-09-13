@@ -70,11 +70,23 @@ the way the ball will really travel:
   usually still drops) along its line until it reaches the pocket trigger's capture distance.
   Any cushion or jaw collider on the way rejects the pot. Checked against 80 rolled balls: 73
   agreed, and it never said "drops" for a ball that stayed out.
-- **The level's own error.** `IsMakeableAtThisSkill` swings the aim by ± the middle of the
-  level's aim-error range and follows each through the exact contact geometry (a cut multiplies
-  the error). It adds the leftover throw uncertainty and requires both sides to still drop and
-  stay clear of other balls. Errors below the midpoint always pot; errors above it may not, so
-  tight pots are still missed some of the time.
+- **The level's own error.** `IsMakeableAtThisSkill` swings the aim by ± a quarter of the middle of
+  the level's aim-error range (`MakeabilityErrorFraction`) and follows each through the exact
+  contact geometry (a cut multiplies the error). It adds the same share of the leftover throw
+  uncertainty and requires both sides to still drop and stay clear of other balls. Larger errors may
+  not pot, so tight pots are still missed some of the time.
+  The full midpoint was measured to be far too cautious. Medium dropped 80 of the 81 pots it
+  attempted, yet ~85% of its visits ended on "no makeable pot". When it attempted the pots that gate
+  rejected, 65 of 91 still went in. Same seed, 60 visits each:
+
+  | Share of the error | Medium pots/visit | Pro pots/visit (5+ visits) | Attempts potted |
+  |---|---|---|---|
+  | 1.0 (old) | 1.37 | 2.25 (10/60) | 93–98% |
+  | 0.5 | 2.40 | — | 92% |
+  | 0.25 (shipped) | 2.82 | 3.73 (22/60) | 87–89% |
+
+  Beginner never filters on makeability and is unchanged by it (0.70–0.85 per visit). Its visits
+  mostly end with the best pot under `minAcceptablePotScore` 0.6.
 - **Next-shot quality** (§4, §5.1) only credits a leave with a pot the level could make by the
   same test. It is averaged over the predicted cue-ball rest and ±30% of its travel, because the
   rest estimate is typically 0.1–2 units out.
@@ -161,6 +173,15 @@ Measured in Play mode through the real pipeline, not assumed:
   touched first. The collision itself stops being predictable at that pace. (Pro's scene briefly had
   `basePowerFraction` 0.8, which drove every pot to that speed: 27% of pot attempts failed, against
   8% with spec power and the cap.)
+- **What `basePowerFraction` controls now.** Only safeties (`SafetyPowerFor`, including Beginner's
+  soft contact). Pots use `PotPowerFor`, escapes a fixed 0.3, and the break `breakPowerFraction`.
+  Measured straight shots through the real strike pipeline, as power → launch speed → total roll:
+  0.10 → 2.7 m/s → 3.6 units, 0.15 → 3.7 → 6.3, 0.25 → 5.6 → 13.8, 0.40 → 8.4 → 20.8,
+  1.0 → 19.6 → 65.8 (table diagonal 16.6). Safeties at spec power go out around 0.12, which really is
+  soft. But only 4 of 115 logged safeties failed to reach the ball. Raising it to 1.0 sent safeties
+  out at ~0.69 and they fouled 11 of 22. The high safety foul rate is the rules issue in
+  `GAME_MECHANICS.md` (on a colour, hitting it without potting anything is scored as a foul), not
+  power.
 - **Sight margin near clusters.** `sightMarginBallRadii` stays at 0.25. With the clearance logging
   below, no run showed misses concentrating on shots with a tight gap beside the line, and no failure
   started with the object ball clipping a neighbour. The AI hardly ever takes a pot on a red inside a
