@@ -61,6 +61,24 @@ For every legal target ball × every one of the 6 pockets, build one candidate:
 This produces a list of *makeable* candidate pots given the current table state. An empty
 list (no legal pot exists at all) always forces a safety shot regardless of level (see §5).
 
+### 3.1 Would it actually drop? (added after Play-mode measurement)
+
+A clear line to the pocket's centre is not enough on this table. Each candidate is also checked
+the way the ball will really travel:
+
+- **Jaws.** `DropsInto` sweeps the object ball (0.6 × radius, since a ball that only grazes a jaw
+  usually still drops) along its line until it reaches the pocket trigger's capture distance.
+  Any cushion or jaw collider on the way rejects the pot. Checked against 80 rolled balls: 73
+  agreed, and it never said "drops" for a ball that stayed out.
+- **The level's own error.** `IsMakeableAtThisSkill` swings the aim by ± the middle of the
+  level's aim-error range and follows each through the exact contact geometry (a cut multiplies
+  the error). It adds the leftover throw uncertainty and requires both sides to still drop and
+  stay clear of other balls. Errors below the midpoint always pot; errors above it may not, so
+  tight pots are still missed some of the time.
+- **Next-shot quality** (§4, §5.1) only credits a leave with a pot the level could make by the
+  same test. It is averaged over the predicted cue-ball rest and ±30% of its travel, because the
+  rest estimate is typically 0.1–2 units out.
+
 ## 4. Scoring candidates
 
 ```
@@ -120,6 +138,33 @@ Once a shot (pot or safety) is chosen as `(aimForward, spinOffset, powerFraction
    **Do not** give the AI a separate, more-precise code path that bypasses the normal
    strike pipeline — it should be physically capable of exactly what a human is capable
    of, with worse aim, not literally superhuman precision under the hood.
+
+### 6.1 Planning the strike so the physics does what was planned
+
+Measured in Play mode through the real pipeline, not assumed:
+
+- **Throw compensation.** With zero aim error the object ball leaves 1.4–7.8° off the ghost-ball
+  line on cut shots, dragged towards the cue ball's travel. `ExpectedThrowDegrees` is a fit to 26
+  calibration strikes (cut angle, impact speed, topspin, sliding vs rolling). The AI aims a touch
+  thinner to cancel it, as a human learns to. On 12 check shots it cut the zero-error object-ball
+  error from 3.4° to 1.1°. This is planning, not precision: error injection (§6 step 1) still
+  applies afterwards.
+- **Pot power.** A cut only sends the object ball off at `impact speed × cos(cut)`. Distance-only
+  power under-hit cut pots, which stopped 1.3–2.7 units short. `PotPowerFor` works back from
+  the object ball reaching the pocket with room to spare, allowing for the level's worst
+  under-hit.
+- **Cue-ball rest** (§5.1) is fitted to 18 real strikes rather than a guess: the old estimate put
+  a 60° cut's cue ball 0.9 units away when it travelled 4.6.
+- **Side spin is not used on pots yet.** Side spin bends the cue ball's path (squirt/swerve), and
+  nothing models that. On Pro, pots played with side spin missed 19 of 27, sending the object ball
+  3–41° off, against 2 of 67 without it. Until that is measured and allowed for, pots only use
+  follow/stun/screw. Pro's "full" spin usage is therefore limited to vertical spin for now.
+- **Levels that never play safe** (Beginner, `safetyProbability 0`) are not filtered by
+  makeability. They take a makeable pot when one exists, and otherwise still go for the easiest
+  pot they see and miss naturally, as §5 and the Beginner row in `AI_DIFFICULTY_LEVELS.md` describe.
+- **Debug tracking.** With `debugLogging` on, every pot attempt logs the predicted vs actual
+  object-ball direction, how close it got to the pocket, and how far the cue ball stopped from
+  the predicted rest.
 
 ## 7. Ball-in-hand placement (opening shot / after a foul)
 

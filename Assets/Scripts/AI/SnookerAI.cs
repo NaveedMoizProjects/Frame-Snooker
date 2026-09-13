@@ -85,10 +85,18 @@ public class SnookerAI : MonoBehaviour
     private Rigidbody cueBall;
     private readonly List<Vector3> pockets = new List<Vector3>(6);
     private float tableDiagonal;
+    // Per pocket: how close (flat, centre to centre) a ball has to get to the pocket trigger's centre
+    // before its collider touches the trigger and it drops. Read off the trigger, not guessed.
+    private readonly List<float> pocketReach = new List<float>(6);
+    // Everything a ball physically collides with - cushions, jaws, stray scenery - so the pocket entry
+    // test sees exactly the geometry the ball will meet.
+    private int ballBlockerMask;
+    private readonly RaycastHit[] entryHits = new RaycastHit[16];
 
     private readonly List<ShotCandidate> candidates = new List<ShotCandidate>(128);
     private readonly List<Rigidbody> targetBuffer = new List<Rigidbody>(16);
     private readonly List<Rigidbody> nextTargetBuffer = new List<Rigidbody>(16);
+    private int candidatesGenerated;
 
     private bool waitingForShot;
     private bool shotWasMine;
@@ -102,14 +110,19 @@ public class SnookerAI : MonoBehaviour
         public BallType type;
         public Vector3 ghost;
         public Vector3 pocket;
+        public int pocketIndex;
+        public Vector3 cueBallPos;
         public Vector3 aimDir;
         public float cutAngle;
         public float span;
+        public float cueToGhost;
+        public float objectToPocket;
         public float potScore;
         public float positionScore;
         public float finalScore;
         public Vector2 spin;
         public float powerFraction;
+        public bool makeable;
     }
 
     private struct ShotPlan
@@ -124,6 +137,17 @@ public class SnookerAI : MonoBehaviour
         public float aimErrorDegrees;
         public float powerErrorPercent;
         public string target;
+        public int candidatesGenerated;
+        public int candidateCount;
+
+        // Pot attempts only - what the debug tracker compares the real result against.
+        public Rigidbody objectBall;
+        public Vector3 pocket;
+        public Vector3 cueBallPos;
+        public float cueToGhost;
+        public float objectToPocket;
+        public float expectedThrowDegrees;
+        public Vector3 predictedCueRest;
     }
 
     void Start()
@@ -153,8 +177,23 @@ public class SnookerAI : MonoBehaviour
             return;
         }
 
+        int ballLayer = cueBall.gameObject.layer;
+        for (int layer = 0; layer < 32; layer++)
+            if (!Physics.GetIgnoreLayerCollision(ballLayer, layer)) ballBlockerMask |= 1 << layer;
+
         foreach (var pocket in FindObjectsOfType<PocketTrigger>())
+        {
+            var trigger = pocket.GetComponent<Collider>();
+            Vector3 centre = trigger != null ? trigger.bounds.center : pocket.transform.position;
+            float triggerRadius = trigger != null ? Mathf.Min(trigger.bounds.extents.x, trigger.bounds.extents.z) : 0f;
+
+            // The trigger is a sphere sitting a little below the balls' plane, so the flat distance at
+            // which a ball first touches it is less than the two radii added together.
+            float touch = triggerRadius + cue.CueBallRadius;
+            float drop = centre.y - cueBall.position.y;
             pockets.Add(pocket.transform.position);
+            pocketReach.Add(Mathf.Sqrt(Mathf.Max(0f, touch * touch - drop * drop)));
+        }
 
         // The table's own size, straight off the pocket layout, so nothing here is a magic number
         // tied to one table model.
@@ -243,14 +282,15 @@ public class SnookerAI : MonoBehaviour
             // it only makes it shakier.
             ballsPottedThisVisit += potted;
             if (debugLogging)
-                Debug.Log($"[AI:{profile.name}] Shot resolved, {potted} potted. " +
+                Debug.Log($"[AI:{profile.name}] OUTCOME={(potted > 0 ? "POTTED " + potted : "MISS")} (turn kept). " +
                           $"Visit now {ballsPottedThisVisit} (soft cap {softPotCapThisVisit}), " +
                           $"error x{PressureMultiplier():F2}.");
         }
         else
         {
             if (debugLogging && visitActive)
-                Debug.Log($"[AI:{profile.name}] Visit over after {ballsPottedThisVisit} ball(s).");
+                Debug.Log($"[AI:{profile.name}] OUTCOME={(potted > 0 ? "POTTED " + potted + " but" : "MISS/FOUL -")} " +
+                          $"turn lost. Visit over after {ballsPottedThisVisit} ball(s).");
             visitActive = false;
         }
     }
@@ -350,8 +390,9 @@ public class SnookerAI : MonoBehaviour
 
             Vector3 objPos = ball.transform.position;
 
-            foreach (var pocket in pockets)
+            for (int pocketIndex = 0; pocketIndex < pockets.Count; pocketIndex++)
             {
+                Vector3 pocket = pockets[pocketIndex];
                 Vector3 pocketDir = Flat3(pocket - objPos).normalized;
                 if (pocketDir.sqrMagnitude < 0.5f) continue;
 
@@ -365,8 +406,15 @@ public class SnookerAI : MonoBehaviour
 
                 if (!cue.IsPathClear(cueBallPos, ghost, ball, cueBall, true, SightMargin)) continue;
                 if (!cue.IsPathClear(objPos, pocket, ball, ignoreCueOnPocketLine, false, SightMargin)) continue;
+                // The ball-only check above can't see the jaws. A ball sent at a corner pocket from along
+                // the rail hits the jaw and never reaches the drop, however clear the line to the
+                // pocket centre is (measured: a corner only takes balls within about 15 degrees of its
+                // diagonal).
+                if (!DropsInto(objPos, pocketDir, pocketIndex)) continue;
 
-                float span = toGhost.magnitude + Flat3(pocket - objPos).magnitude;
+                float d1 = toGhost.magnitude;
+                float d2 = Flat3(pocket - objPos).magnitude;
+                float span = d1 + d2;
 
                 into.Add(new ShotCandidate
                 {
@@ -374,9 +422,13 @@ public class SnookerAI : MonoBehaviour
                     type = id.Type,
                     ghost = ghost,
                     pocket = pocket,
+                    pocketIndex = pocketIndex,
+                    cueBallPos = cueBallPos,
                     aimDir = aimDir,
                     cutAngle = cutAngle,
                     span = span,
+                    cueToGhost = d1,
+                    objectToPocket = d2,
                     potScore = PotScore(cutAngle, span)
                 });
             }
@@ -394,6 +446,24 @@ public class SnookerAI : MonoBehaviour
         => Mathf.Clamp(basePowerFraction + (span / tableDiagonal) * powerPerTableDiagonal,
                        powerFractionLimits.x, powerFractionLimits.y);
 
+    // A pot has to be struck hard enough for the OBJECT ball to reach the pocket, and on a cut it only
+    // leaves at the impact speed times cos(cut). PowerFor scales with distance alone, so cut pots were
+    // under-hit: logged misses left at 0.85-2.6 m/s for 1.6-5.7 units and stopped 1.3-2.7 short of
+    // the pocket. Object balls were measured losing about 2.1 (m/s)^2 per unit rolled; this asks for
+    // enough to get there with a unit and a half to spare, works back through the cut and the cue
+    // ball's own fall-off (3.6 per unit - over eight units it lost ~3.4, more than short shots show),
+    // and leaves headroom for this level's worst under-hit so a power error alone doesn't stop it short.
+    private float PotPowerFor(ShotCandidate c)
+    {
+        float objectSpeedSq = 2.1f * (c.objectToPocket + 1.5f);
+        float cos = Mathf.Max(0.35f, Mathf.Cos(c.cutAngle * Mathf.Deg2Rad));
+        float impactSq = objectSpeedSq / (cos * cos);
+        float atOneUnitSq = impactSq + 3.6f * Mathf.Max(0f, c.cueToGhost - 1f);
+
+        float needed = Mathf.Sqrt(atOneUnitSq) / 21.6f * (1f + profile.powerErrorPercent * 0.01f);
+        return Mathf.Clamp(Mathf.Max(PowerFor(c.span), needed), powerFractionLimits.x, powerFractionLimits.y);
+    }
+
     // A safety is soft, but it still has to arrive - a cue ball that stops short of the ball on is a
     // foul, not a safety, so the softness scales the distance-based power rather than replacing it.
     private float SafetyPowerFor(float distanceToContact)
@@ -402,19 +472,27 @@ public class SnookerAI : MonoBehaviour
 
     // 5.1 - a cheap guess at where the cue ball stops, good enough to rank candidates against each
     // other. The real physics engine decides what actually happens once the shot is struck.
-    private Vector3 ApproximateCueRest(ShotCandidate candidate, Vector2 spin)
+    // Fitted to 18 real strikes (cut 0/30/60, spin 0/+0.5/-0.5, power 0.18/0.28): the cue ball goes
+    // off along the tangent about 0.5 x (sideways speed)^2, topspin carries it ~1.7x further and screw
+    // ~0.7x, and it runs on along the object ball's line ~0.5 plus or minus what the spin adds. The
+    // previous guess put a 60 degree cut's cue ball 0.9 units away when it really travelled 4.6, so
+    // every spin choice looked like the same leave and position play did nothing.
+    private Vector3 ApproximateCueRest(ShotCandidate candidate, Vector2 spin, float powerFraction)
     {
         Vector3 objectDir = Flat3(candidate.pocket - candidate.ghost).normalized;
         Vector3 tangent = cue.CueDirectionAfterContact(candidate.aimDir, objectDir);
 
-        // A full-ball hit dumps nearly everything into the object ball (stun); a thin cut keeps it.
-        float energyKept = Mathf.Sin(candidate.cutAngle * Mathf.Deg2Rad);
-        float travel = candidate.powerFraction * tableDiagonal * 0.45f * energyKept;
+        float impact = ImpactSpeed(powerFraction, candidate.cueToGhost);
+        float cut = candidate.cutAngle * Mathf.Deg2Rad;
 
-        Vector3 rest = candidate.ghost + tangent * travel;
-        // Deliberate screw/follow drags the finish back down or up the original aim line instead.
-        rest += candidate.aimDir * (spin.y * candidate.powerFraction * tableDiagonal * 0.2f);
+        float sideways = impact * Mathf.Sin(cut);
+        float spinCarry = spin.y >= 0f ? 1f + 1.4f * spin.y : 1f + 0.66f * spin.y;
+        float tangentTravel = 0.5f * sideways * sideways * spinCarry;
 
+        float onward = impact * Mathf.Cos(cut);
+        float forwardTravel = 0.5f + spin.y * (spin.y >= 0f ? 0.11f : 0.06f) * onward * onward;
+
+        Vector3 rest = candidate.ghost + tangent * tangentTravel + objectDir * forwardTravel;
         return cue.ClampToCushion(candidate.ghost, rest);
     }
 
@@ -461,14 +539,17 @@ public class SnookerAI : MonoBehaviour
             Flat3(a.transform.position - restPos).sqrMagnitude
             .CompareTo(Flat3(b.transform.position - restPos).sqrMagnitude));
 
-        int consider = Mathf.Min(3, nextTargetBuffer.Count);
+        // Six covers every colour after a red - the nearest three were often all unpottable.
+        int consider = Mathf.Min(6, nextTargetBuffer.Count);
         float best = 0f;
 
         for (int i = 0; i < consider; i++)
         {
-            Vector3 objPos = nextTargetBuffer[i].transform.position;
-            foreach (var pocket in pockets)
+            Rigidbody next = nextTargetBuffer[i];
+            Vector3 objPos = next.transform.position;
+            for (int pocketIndex = 0; pocketIndex < pockets.Count; pocketIndex++)
             {
+                Vector3 pocket = pockets[pocketIndex];
                 Vector3 pocketDir = Flat3(pocket - objPos).normalized;
                 if (pocketDir.sqrMagnitude < 0.5f) continue;
 
@@ -479,13 +560,56 @@ public class SnookerAI : MonoBehaviour
                 float cut = Vector3.Angle(toGhost.normalized, pocketDir);
                 if (cut > MaxCutAngleDegrees) continue;
 
-                best = Mathf.Max(best, PotScore(cut, toGhost.magnitude + Flat3(pocket - objPos).magnitude));
+                float d1 = toGhost.magnitude;
+                float d2 = Flat3(pocket - objPos).magnitude;
+                float score = PotScore(cut, d1 + d2);
+                // Cheapest rejections first - this runs for every spin, pace and sample of every survey.
+                if (score <= best) continue;
+                // Position on a ball that can't physically drop in this pocket is no position at all.
+                if (!DropsInto(objPos, pocketDir, pocketIndex)) continue;
+                if (!cue.IsPathClear(restPos, ghost, next, cueBall, true, SightMargin)) continue;
+
+                // Only credit a leave this level could actually convert - a "good looking" next ball it
+                // would miss is how a visit ends at one pot.
+                var shot = new ShotCandidate
+                {
+                    objectBall = next, pocket = pocket, pocketIndex = pocketIndex, cueBallPos = restPos,
+                    aimDir = toGhost.normalized, cutAngle = cut, span = d1 + d2,
+                    cueToGhost = d1, objectToPocket = d2, potScore = score
+                };
+                shot.powerFraction = PotPowerFor(shot);
+                CompensateForThrow(ref shot);
+                if (IsMakeableAtThisSkill(shot)) best = score;
             }
         }
         return best;
     }
 
-    private Vector2 ChooseSpin(ShotCandidate candidate, out float positionScore)
+    // How good a leave this spin and pace give, allowing for the rest estimate being off. In play the
+    // cue ball stopped 0.1-2.2 units from the prediction on most pots and up to 5 on firm long ones,
+    // and a leave that is only good at exactly the predicted spot was the usual way a visit ended
+    // (predicted a makeable colour, arrived with none). Averaging the predicted spot with 30% shorter
+    // and 30% longer travel favours leaves that survive the error.
+    private float LeaveQuality(ShotCandidate candidate, Vector2 spin, float power)
+    {
+        Vector3 rest = ApproximateCueRest(candidate, spin, power);
+        Vector3 travel = Flat3(rest - candidate.ghost) * 0.3f;
+
+        float total = NextShotQuality(rest, candidate.objectBall);
+        if (travel.sqrMagnitude < 0.01f) return total;
+
+        total += NextShotQuality(cue.ClampToCushion(rest, rest + travel), candidate.objectBall);
+        total += NextShotQuality(rest - travel, candidate.objectBall);
+        return total / 3f;
+    }
+
+    // Extra pace a positional level may put on a pot purely to send the cue ball further. The pot's own
+    // makeability is re-checked at each pace, since harder hits throw more.
+    private static readonly float[] PositionPowerScales = { 1f, 1.3f, 1.6f };
+
+    // Picks the spin - and, for levels that play position, the pace - that leaves the best next shot.
+    // Writes the chosen power back into the candidate.
+    private Vector2 ChooseSpin(ref ShotCandidate candidate, out float positionScore)
     {
         Vector2[] options = profile.deliberateSpinUsage == SpinUsage.Full ? FullSpins
                           : profile.deliberateSpinUsage == SpinUsage.Basic ? BasicSpins
@@ -495,32 +619,210 @@ public class SnookerAI : MonoBehaviour
         {
             // deliberateSpinUsage None: dead centre, always. Any spin-like result is a mis-hit.
             positionScore = profile.positionWeight > 0f
-                ? NextShotQuality(ApproximateCueRest(candidate, Vector2.zero), candidate.objectBall)
+                ? NextShotQuality(ApproximateCueRest(candidate, Vector2.zero, candidate.powerFraction), candidate.objectBall)
                 : 0f;
             return Vector2.zero;
         }
 
+        float basePower = candidate.powerFraction;
         Vector2 best = Vector2.zero;
+        float bestPower = basePower;
         float bestScore = float.NegativeInfinity;
-        foreach (var spin in options)
+        foreach (float scale in PositionPowerScales)
         {
-            float score = NextShotQuality(ApproximateCueRest(candidate, spin), candidate.objectBall);
-            if (score > bestScore)
+            float power = Mathf.Clamp(basePower * scale, powerFractionLimits.x, powerFractionLimits.y);
+            foreach (var spin in options)
             {
-                bestScore = score;
-                best = spin;
+                // Side spin bends the cue ball's path (squirt/swerve) and nothing here models that yet:
+                // on Pro, pots played with side missed 19 of 27, sending the object ball 3-41 degrees off,
+                // against 2 of 67 without it. Until it is measured and allowed for, pots use only
+                // follow/stun/screw.
+                if (spin.x != 0f) continue;
+
+                if (scale > 1f)
+                {
+                    ShotCandidate paced = candidate;
+                    paced.powerFraction = power;
+                    paced.spin = spin;
+                    CompensateForThrow(ref paced);
+                    if (!IsMakeableAtThisSkill(paced)) continue;
+                }
+
+                float score = LeaveQuality(candidate, spin, power);
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = spin;
+                    bestPower = power;
+                }
             }
         }
+        candidate.powerFraction = bestPower;
         positionScore = Mathf.Max(0f, bestScore);
         return best;
+    }
+
+    // Can a ball leaving 'from' along 'dir' actually drop into this pocket? Its line has to come within
+    // the pocket's reach of the trigger centre, and the ball - most of its width, not just its centre
+    // line - has to get that far without hitting a jaw or cushion. Other balls are the line-of-sight
+    // checks' job, not this one's.
+    private bool DropsInto(Vector3 from, Vector3 dir, int pocketIndex)
+    {
+        Vector3 toPocket = Flat3(pockets[pocketIndex] - from);
+        float along = Vector3.Dot(toPocket, dir);
+        float reach = pocketReach[pocketIndex];
+        float offLineSq = toPocket.sqrMagnitude - along * along;
+        if (along <= 0f || offLineSq >= reach * reach) return false;
+
+        float entryDistance = along - Mathf.Sqrt(reach * reach - offLineSq);
+        if (entryDistance <= 0f) return true;
+
+        // 0.6 of the real radius, because a ball that only grazes a jaw is usually knocked in rather
+        // than out. Calibrated against 80 rolled balls (6 pockets x approach angle, plus lateral
+        // offsets): 0.6 agreed with 73, and never called a ball in that actually stayed out; the full
+        // radius agreed with only 64 and rejected corner pots that drop from 0.25 off the line.
+        int count = Physics.SphereCastNonAlloc(from, cue.CueBallRadius * 0.6f, dir, entryHits, entryDistance,
+                                               ballBlockerMask, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            Rigidbody rb = entryHits[i].collider.attachedRigidbody;
+            if (rb != null && rb.GetComponent<BallIdentity>() != null) continue;
+            return false;
+        }
+        return true;
+    }
+
+    // Collision throw on this table, measured through the real strike pipeline with zero aim error: the
+    // object ball does not leave along the line of centres but is dragged a few degrees towards the cue
+    // ball's direction of travel. It grows with cut angle and with impact speed (26 shots, power
+    // 0.15-0.32, 1-5 units: e.g. 20/40/60 degree cuts threw 1.4/1.5/1.6 at 2.3 m/s and 3.0/4.6/5.9 at
+    // 4.6 m/s), and topspin adds to it. It comes from the physics contact offset, so it is really
+    // there for every shot, and 3-4 degrees is 0.2-0.3 units off line four units out - more than a
+    // corner's jaws accept. A human player learns to cut a touch thinner for it; this is the AI doing
+    // the same (on 12 check shots it took the zero-aim-error object ball from 3.4 to 1.1 degrees off).
+    private static float ExpectedThrowDegrees(float cutDegrees, float impactSpeed, float spinY, float cueToContact)
+    {
+        float cutShape = (0.5f + cutDegrees / 40f) * Mathf.Clamp01(cutDegrees / 10f);
+        float speedScale = Mathf.Clamp(0.95f * (impactSpeed - 1.1f), 1f, 3.1f);
+        float topspin = 1f + 0.6f * Mathf.Max(0f, spinY) * Mathf.Clamp01((cutDegrees - 15f) / 45f);
+        // A cue ball that meets the object ball within a unit or so of being struck is still sliding
+        // and throws it about half as much (1-unit calibration shots: 1.5-2.4 vs ~3 further out).
+        float sliding = Mathf.Lerp(0.6f, 1f, Mathf.InverseLerp(0.8f, 2.5f, cueToContact));
+        return cutShape * speedScale * topspin * sliding;
+    }
+
+    // Cue ball speed arriving at the object ball. Power fraction to launch speed and the fall-off per
+    // unit travelled are both read off the same calibration shots (1 unit: 3.3 m/s at 0.15 power,
+    // 5.4 at 0.25, 6.7 at 0.32; speed squared dropping about 4 per unit for firm shots, 2.6 for soft).
+    private static float ImpactSpeed(float powerFraction, float distance)
+    {
+        float atOneUnit = 21.6f * powerFraction;
+        float fallOff = Mathf.Lerp(2.6f, 4f, Mathf.InverseLerp(4f, 5.4f, atOneUnit));
+        float squared = atOneUnit * atOneUnit - fallOff * (distance - 1f);
+        return Mathf.Max(0.4f * atOneUnit, Mathf.Sqrt(Mathf.Max(0f, squared)));
+    }
+
+    private float ThrowFor(ShotCandidate c)
+        => ExpectedThrowDegrees(c.cutAngle, ImpactSpeed(c.powerFraction, c.cueToGhost), c.spin.y, c.cueToGhost);
+
+    // Where the object ball actually goes when the cue ball is sent along 'aimDir': the ideal
+    // line-of-centres direction, pulled towards the cue ball's travel by the expected throw.
+    private bool ObjectDirectionWithThrow(Vector3 from, Vector3 aimDir, Vector3 objPos, float throwDegrees, out Vector3 objectDir)
+    {
+        if (!IdealObjectDirection(from, aimDir, objPos, out objectDir)) return false;
+        float side = Mathf.Sign(Vector3.SignedAngle(objectDir, aimDir, Vector3.up));
+        objectDir = Quaternion.AngleAxis(side * throwDegrees, Vector3.up) * objectDir;
+        return true;
+    }
+
+    // Aim so that, after throw, the object ball runs down the pocket line: pick the ghost ball for a
+    // line of centres rotated away from the cue ball's side by the throw - a slightly thinner cut.
+    private void CompensateForThrow(ref ShotCandidate c)
+    {
+        Vector3 objPos = Flat3(c.objectBall.position);
+        Vector3 pocketDir = Flat3(c.pocket - objPos).normalized;
+        float side = Mathf.Sign(Vector3.SignedAngle(pocketDir, c.aimDir, Vector3.up));
+        Vector3 lineOfCentres = Quaternion.AngleAxis(-side * ThrowFor(c), Vector3.up) * pocketDir;
+
+        Vector3 ghost = objPos - lineOfCentres * BallDiameter;
+        Vector3 toGhost = Flat3(ghost - c.cueBallPos);
+        if (toGhost.sqrMagnitude > 1e-6f) c.aimDir = toGhost.normalized;
+    }
+
+    // Would this level's own aim error usually pot it? Swing the aim both ways by the middle of the
+    // error range this shot draws from, follow each through the contact (a cut multiplies the error -
+    // a 60 degree cut from five units turns a tenth of a degree into about 2.5 on the object ball) and
+    // the throw, and require both to drop past the real jaws. Gating on the middle rather than the
+    // worst case is deliberate: errors under it always pot, errors over it may not, so a tight pot is
+    // still missed a fair share of the time and the golden rule shows up at the table.
+    // The old version measured the miss against the whole pocket trigger (0.48 either side) and
+    // ignored both the jaws and the cut's amplification, so it admitted long cut pots the AI could
+    // never convert and visits died on them.
+    private bool IsMakeableAtThisSkill(ShotCandidate c)
+    {
+        Vector2 range = profile.AimErrorRangeFor(c.potScore);
+        float gateError = ((range.x + range.y) * 0.5f + profile.aimErrorDegreesPerBallPotted * ballsPottedThisVisit)
+                         * PressureMultiplier();
+
+        // Real height for the jaw cast - a flattened position would sweep along the floor plane.
+        Vector3 objPos = c.objectBall.position;
+        float throwDegrees = ThrowFor(c);
+        // The throw correction is a fit, not an oracle. Aim-error sensitivity is modelled exactly
+        // (measured -19.9 deg per degree against -20.05 predicted, 45 degree cut from 5 units), but
+        // what is left of the throw still scatters the object ball, typically by 0.4-2 degrees on a
+        // 45 degree cut. Carry that as extra object-ball error in the same direction as the aim error,
+        // which steers the AI towards straighter pots where there is little to throw. (0.6x was tried
+        // and left 6 of 11 visits with nothing makeable on - the misses it was meant to stop turned out
+        // to be under-hit balls, fixed in PotPowerFor.)
+        float throwUncertainty = 0.2f + 0.4f * throwDegrees;
+
+        for (float sign = -1f; sign <= 1f; sign += 2f)
+        {
+            Vector3 aim = Quaternion.AngleAxis(sign * gateError, Vector3.up) * c.aimDir;
+            if (!ObjectDirectionWithThrow(Flat3(c.cueBallPos), aim, Flat3(objPos), throwDegrees, out Vector3 objectDir)) return false;
+            // Same side as the aim error pushed it.
+            Vector3 toPocket = Flat3(c.pocket - objPos).normalized;
+            float pushedSide = Mathf.Sign(Vector3.SignedAngle(toPocket, objectDir, Vector3.up));
+            objectDir = Quaternion.AngleAxis(pushedSide * throwUncertainty, Vector3.up) * objectDir;
+            if (!DropsInto(objPos, objectDir, c.pocketIndex)) return false;
+
+            // A couple of degrees off line is still a pot on an empty table, but not if it clips a ball
+            // sitting just beside the pocket line, which the dead-straight sight check can't see.
+            Vector3 alongPath = objPos + objectDir * c.objectToPocket;
+            if (!cue.IsPathClear(objPos, alongPath, c.objectBall, cueBall, false)) return false;
+        }
+        return true;
     }
 
     private bool ChooseBestCandidate(out ShotCandidate best)
     {
         best = default;
+        candidatesGenerated = candidates.Count;
         if (candidates.Count == 0) return false;
 
-        candidates.Sort((a, b) => b.potScore.CompareTo(a.potScore));
+        // Power and throw first (spin is chosen later, so makeability judges the plain-ball throw), then
+        // drop the ones this level physically cannot convert before ranking the rest.
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            ShotCandidate c = candidates[i];
+            c.powerFraction = PotPowerFor(c);
+            CompensateForThrow(ref c);
+            c.makeable = IsMakeableAtThisSkill(c);
+            candidates[i] = c;
+        }
+
+        if (profile.PlaysDeliberateSafety)
+        {
+            // A level that weighs safety against the pot only takes on pots it can usually convert.
+            candidates.RemoveAll(c => !c.makeable);
+            if (candidates.Count == 0) return false;
+        }
+        // A level that never plays safe (Beginner: "always just goes for the ball on, even when that's a
+        // bad idea") still goes for the easiest pot it sees - makeability only puts the ones it can
+        // actually make first, so it misses the hard ones naturally instead of tapping the ball on.
+        candidates.Sort((a, b) => a.makeable != b.makeable
+            ? b.makeable.CompareTo(a.makeable)
+            : b.potScore.CompareTo(a.potScore));
 
         int survey = profile.candidateSurveyCount <= 0
             ? candidates.Count
@@ -530,8 +832,7 @@ public class SnookerAI : MonoBehaviour
         for (int i = 0; i < survey; i++)
         {
             ShotCandidate c = candidates[i];
-            c.powerFraction = PowerFor(c.span);
-            c.spin = ChooseSpin(c, out float positionScore);
+            c.spin = ChooseSpin(ref c, out float positionScore);
             c.positionScore = positionScore;
             c.finalScore = c.potScore * profile.PotWeight + c.positionScore * profile.positionWeight;
 
@@ -541,11 +842,28 @@ public class SnookerAI : MonoBehaviour
                 best = c;
             }
         }
+
+        // Re-aim for the spin actually chosen - topspin throws the object ball further.
+        if (best.objectBall != null) CompensateForThrow(ref best);
         return true;
     }
 
     // ---------------------------------------------------------------- 5. Pot or safety?
+    // Wrapper so the candidate count is stamped once for the debug line, rather than at every one of
+    // the ten places a plan can be returned from.
     private ShotPlan PlanShot()
+    {
+        candidates.Clear();
+        candidatesGenerated = 0;
+        ShotPlan plan = ChooseShot();
+        plan.candidatesGenerated = candidatesGenerated;
+        plan.candidateCount = 0;
+        foreach (var c in candidates)
+            if (c.makeable) plan.candidateCount++;
+        return plan;
+    }
+
+    private ShotPlan ChooseShot()
     {
         Vector3 cueBallPos = cueBall.transform.position;
         CollectLegalTargets(targetBuffer);
@@ -581,7 +899,16 @@ public class SnookerAI : MonoBehaviour
             isSafety = false,
             potScore = best.potScore,
             finalScore = best.finalScore,
-            target = $"{best.type} -> pocket {best.pocket.x:F1},{best.pocket.z:F1} (cut {best.cutAngle:F0}deg)"
+            target = $"{best.type} -> pocket {best.pocket.x:F1},{best.pocket.z:F1} " +
+                     $"(cut {best.cutAngle:F0}deg, cue->ghost {best.cueToGhost:F2}, obj->pocket {best.objectToPocket:F2}" +
+                     $"{(best.makeable ? "" : ", not makeable at this skill")})",
+            objectBall = best.objectBall,
+            pocket = best.pocket,
+            cueBallPos = cueBallPos,
+            cueToGhost = best.cueToGhost,
+            objectToPocket = best.objectToPocket,
+            expectedThrowDegrees = ThrowFor(best),
+            predictedCueRest = ApproximateCueRest(best, best.spin, best.powerFraction)
         };
     }
 
@@ -854,6 +1181,9 @@ public class SnookerAI : MonoBehaviour
         {
             Vector3 realised = cue.CurrentAimForward;
             Debug.Log($"[AI:{profile.name}] {(plan.isSafety ? "SAFETY" : "POT")} {plan.target} | " +
+                      $"on={gameManager.CurrentTargetState}" +
+                      $"{(gameManager.CurrentTargetColour.HasValue ? "/" + gameManager.CurrentTargetColour.Value : "")} " +
+                      $"legalTargets={targetBuffer.Count} candidates={plan.candidatesGenerated} makeable={plan.candidateCount} | " +
                       $"potScore={plan.potScore:F2} finalScore={plan.finalScore:F2} | " +
                       $"aimErr={plan.aimErrorDegrees:+0.00;-0.00}deg powerErr={plan.powerErrorPercent:+0.0;-0.0}% | " +
                       $"power={plan.powerFraction:F2} spin={plan.spin} | " +
@@ -870,6 +1200,85 @@ public class SnookerAI : MonoBehaviour
 
         waitingForShot = true;
         shotWasMine = true;
+
+        if (debugLogging && !plan.isSafety && plan.objectBall != null)
+            StartCoroutine(TrackPotAttempt(plan));
+    }
+
+    // Where the object ball WOULD go on a perfect ghost-ball contact, given the aim actually played
+    // (error included): follow the cue ball's line until it is one diameter from the object ball's
+    // centre, and the object ball leaves along the line of centres.
+    private bool IdealObjectDirection(Vector3 from, Vector3 aimDir, Vector3 objPos, out Vector3 objectDir)
+    {
+        objectDir = Vector3.zero;
+        Vector3 toObj = Flat3(objPos - from);
+        float along = Vector3.Dot(toObj, aimDir);
+        float perpSq = toObj.sqrMagnitude - along * along;
+        float diameterSq = BallDiameter * BallDiameter;
+        if (along <= 0f || perpSq >= diameterSq) return false;
+
+        Vector3 contactCentre = from + aimDir * (along - Mathf.Sqrt(diameterSq - perpSq));
+        objectDir = Flat3(objPos - contactCentre).normalized;
+        return true;
+    }
+
+    // Debug only (debugLogging): compares what the object ball really did with what the shot model
+    // predicts from the aim actually played - error and throw correction included - plus how close it
+    // got to the pocket, how fast it left, and where the cue ball stopped against the position
+    // estimate. Agreement means misses are the injected error; disagreement points at the model.
+    private IEnumerator TrackPotAttempt(ShotPlan plan)
+    {
+        Rigidbody ball = plan.objectBall;
+        Vector3 objStart = Flat3(ball.position);
+        Vector3 pocket = Flat3(plan.pocket);
+        Vector3 intended = (pocket - objStart).normalized;
+
+        // Prediction = the aim actually played (error included) through the contact, plus the throw
+        // the AI already allowed for. With zero aim error this is ~0 when the throw correction is right.
+        string predicted = "cue ball misses the object ball entirely";
+        if (ObjectDirectionWithThrow(Flat3(plan.cueBallPos), plan.aimDir, objStart, plan.expectedThrowDegrees, out Vector3 predictedDir))
+        {
+            float predictedDev = Vector3.SignedAngle(intended, predictedDir, Vector3.up);
+            predicted = $"{predictedDev:+0.00;-0.00}deg (misses pocket centre by " +
+                        $"{plan.objectToPocket * Mathf.Tan(Mathf.Abs(predictedDev) * Mathf.Deg2Rad):F3}, " +
+                        $"throw allowed {plan.expectedThrowDegrees:F2}deg)";
+        }
+
+        float giveUp = Time.time + 20f;
+        while (!gameManager.PottedThisShot.Contains(ball) && Flat3(ball.velocity).sqrMagnitude < 0.01f)
+        {
+            if (Time.time > giveUp || (!waitingForShot && Time.time > giveUp - 18f))
+            {
+                Debug.Log($"[AI:{profile.name}] TRACK {TypeName(ball)} never moved | predicted objDev {predicted}");
+                yield break;
+            }
+            yield return new WaitForFixedUpdate();
+        }
+
+        // A couple of steps in, so the direction is off the contact rather than mid-collision.
+        yield return new WaitForFixedUpdate();
+        yield return new WaitForFixedUpdate();
+        Vector3 v = Flat3(ball.velocity);
+        string actual = v.sqrMagnitude > 1e-4f
+            ? $"{Vector3.SignedAngle(intended, v.normalized, Vector3.up):+0.00;-0.00}deg at {v.magnitude:F2} m/s"
+            : "n/a";
+
+        float closest = float.PositiveInfinity;
+        while (!gameManager.PottedThisShot.Contains(ball) && Time.time < giveUp && waitingForShot)
+        {
+            closest = Mathf.Min(closest, (Flat3(ball.position) - pocket).magnitude);
+            yield return new WaitForFixedUpdate();
+        }
+        bool dropped = gameManager.PottedThisShot.Contains(ball);
+
+        // Position check: where the cue ball actually came to rest against where position play
+        // expected it.
+        while (waitingForShot && Time.time < giveUp) yield return new WaitForFixedUpdate();
+        float restMiss = (Flat3(cueBall.position) - Flat3(plan.predictedCueRest)).magnitude;
+
+        Debug.Log($"[AI:{profile.name}] TRACK {TypeName(ball)} | predicted objDev {predicted} | " +
+                  $"actual objDev {actual} | closest to pocket {(dropped ? "DROPPED" : closest.ToString("F3"))} | " +
+                  $"cue rest off prediction by {restMiss:F2}");
     }
 
     // CueVisualController parks the stick at sin/cos of this angle around the ball and points it back
@@ -906,7 +1315,13 @@ public class SnookerAI : MonoBehaviour
                 GenerateCandidates(point, targetBuffer, true, candidates);
                 float score = 0f;
                 foreach (var candidate in candidates)
-                    score = Mathf.Max(score, candidate.potScore);
+                {
+                    if (candidate.potScore <= score) continue;
+                    ShotCandidate c = candidate;
+                    c.powerFraction = PotPowerFor(c);
+                    CompensateForThrow(ref c);
+                    if (IsMakeableAtThisSkill(c)) score = c.potScore;
+                }
 
                 // Off the break there is no pot anywhere in the D, and picking on pot score alone
                 // would just take the first sample - which sits behind the blue and pink and can't
