@@ -158,6 +158,26 @@ contact/throw/jaw geometry; both swung sides must still drop. Levels that play d
 safety (`PlaysDeliberateSafety`) drop every non-makeable candidate before ranking the
 rest; Beginner never does, so it just ranks makeable ones first when any exist.
 
+**Confirmed bug (September 2026): the perturbed-path neighbour check used no safety
+margin.** After the swung aim clears the jaws (`DropsInto`), this method separately checks
+that the object ball's path to the pocket doesn't clip a neighbouring ball
+(`cue.IsPathClear(objPos, alongPath, c.objectBall, cueBall, false)`) - but called with no
+`margin` argument, i.e. a bare ball-radius corridor, while every sibling sight check in
+`GenerateCandidates` (and the cue-ball-to-ghost check earlier in this same method) requires
+`SightMargin` (built from `sightMarginBallRadii = 0.25`). Measured live: shots whose
+tightest line gap to a neighbour was under half a ball radius failed at ~29% (nearly 4x
+the wide-open rate), and over a third of those failures were literally the object ball
+running into that neighbour on the way - exactly what a zero-margin check on an
+*already-uncertain, error-perturbed* path would let through. Fixed by passing `SightMargin`
+into this call too, so the path this level admits might not go exactly as planned gets at
+least as much clearance as the ideal straight line already needed to become a candidate at
+all. Verified live (Pro, ~500 attempts before/after): tight-gap (<0.5r) fail rate roughly
+halved (29% -> 16%), overall fail rate 13.2% -> 11.7%, with a small, expected reduction in
+how many of those specific marginal tight-gap shots get attempted (candidates that were
+only "makeable" because of the inconsistent margin now correctly don't pass) - overall
+attempt volume elsewhere unaffected. Medium checked too, no regression outside its normal
+seed-to-seed variance.
+
 ### 5.3 Pot power and safety/escape power are separate calculations
 
 A cut only launches the object ball at `impact speed × cos(cut)`, so pot power
