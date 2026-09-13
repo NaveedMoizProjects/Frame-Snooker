@@ -736,6 +736,24 @@ public class GameManager : MonoBehaviour
                 ResolveColourPot(identity, potted);
             }
         }
+
+        // Whatever removed the last red - a clean pot (handled above, but only sets
+        // currentTargetColour to null, "needs nominating or auto-set") or one dropping
+        // incidentally during a foul (the branch above skips it entirely, per the real rule
+        // that a foul keeps the incoming player on Red while reds remain) - once none are
+        // left there is nothing further to be "on Red" for, and the fixed colour sequence
+        // must actually start. AdvanceColourSequence seeds colourSequenceIndex from its
+        // "not started" -1 to 0 (Yellow) the first time this fires; without it,
+        // colourSequenceIndex stayed at -1 until the FIRST colour pot incremented it to 0,
+        // re-targeting the colour that pot had just potted (now off the table) instead of
+        // advancing to the next one - CollectLegalTargets/a human alike could then never
+        // legally hit anything again, since the "on" ball no longer existed.
+        if (RedsRemainingOnTable() == 0 && colourSequenceIndex < 0)
+        {
+            targetState = TargetBallState.Colour;
+            AdvanceColourSequence();
+            OnTargetChanged?.Invoke(targetState, currentTargetColour);
+        }
     }
 
     // 5.3 Respawn logic (physical placement only - scoring now lives in EvaluateFoul).

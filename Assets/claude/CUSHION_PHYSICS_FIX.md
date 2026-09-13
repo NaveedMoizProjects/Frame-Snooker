@@ -1,5 +1,16 @@
 # Cushion Physics Fix
 
+**Status note (September 2026):** re-verified the cushion/jaw colliders while investigating an
+unrelated bug (see `AI_FOUL_LOGIC.md`). `CushionPhysicsMaterial.cs` does not exist anywhere in
+`Assets/Scripts` - this custom-script approach was apparently abandoned or never actually
+landed, contrary to what the rest of this doc describes. Cushion bounce is evidently working
+correctly through Unity's built-in collision response alone (confirmed via many hundreds of
+shots across this project's AI testing, never once flagged as sticking) - almost certainly via
+a properly tuned `PhysicMaterial` (this doc's own step 4), not the script below. All 18
+cushion/jaw `MeshCollider`s across Beginner/Medium/Pro are on the `Cushion` layer, non-trigger,
+enabled, and overlap their visual meshes correctly - the geometry side of this doc still holds,
+only the "how the bounce is computed" section is stale.
+
 ## Symptom
 Ball cushion se takra kar wahin ruk jati thi ("bounce" nahi hoti thi) — instead of
 reflecting off at a mirror angle like a real snooker cushion.

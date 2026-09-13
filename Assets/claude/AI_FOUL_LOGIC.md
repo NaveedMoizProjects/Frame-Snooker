@@ -51,6 +51,31 @@ subscription order), so foul status is known in time. `EvaluateShotResult()` mus
 the `targetState = Colour` transition specifically when the current shot was a foul —
 state stays on `Red` in that case. Legal (non-foul) red pots still transition normally.
 
+## 2.1. Confirmed bug (September 2026): the colour sequence never actually starts when reds run out
+
+Found via playtesting: once all 15 reds were gone, the AI (and, since this was entirely in
+`GameManager`, a human too) stopped being able to do anything legal in the colours-only phase -
+every shot fouled, forever, because the "on" ball no longer physically existed on the table.
+
+Root cause: `colourSequenceIndex` starts at `-1` ("not started") and is only ever advanced
+inside `AdvanceColourSequence()`, called from a *colour* pot - never from the red-pot branch
+that first transitions `targetState` from `Red` to `Colour`. So the first colour ever potted
+(Yellow, the correct target at that point) incremented the index from `-1` to `0`, which maps
+back to `ColourSequence[0]` - **Yellow again**, the ball just potted and now inactive.
+`CollectLegalTargets`/a human alike could then never legally hit anything again. The same
+uninitialised-index problem also applied if the very last red happened to drop incidentally
+during an otherwise-foul shot (that branch skips the `Red`→`Colour` flip entirely, per §2 above,
+so `colourSequenceIndex` never got touched at all in that case).
+
+**Fix:** `EvaluateShotResult()` now checks, after processing every potted ball each shot,
+whether `RedsRemainingOnTable() == 0 && colourSequenceIndex < 0` - true only once, the first
+time reds hit zero, however that happened - and if so calls `AdvanceColourSequence()` itself
+(seeding the index to `0`/Yellow) instead of leaving it uninitialised. Verified via the real
+pipeline (not just static review): potting the last red now correctly leaves Yellow as the one
+legal target, and potting each colour in turn correctly advances Yellow→Green→Brown→Blue→
+Pink→Black, with the frame ending right after Black. All three scenes were run through a full
+colours-only phase to confirm.
+
 ## 3. Every foul type the AI must actively avoid (not just score correctly)
 
 `SCORING_FOUL_HITTING_AUDIT.md` already confirmed `GameManager`'s foul *scoring* math is
