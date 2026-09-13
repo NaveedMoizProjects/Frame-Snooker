@@ -148,6 +148,7 @@ public class SnookerAI : MonoBehaviour
         public float objectToPocket;
         public float expectedThrowDegrees;
         public Vector3 predictedCueRest;
+        public string clearance;
     }
 
     void Start()
@@ -1180,7 +1181,10 @@ public class SnookerAI : MonoBehaviour
         if (debugLogging)
         {
             Vector3 realised = cue.CurrentAimForward;
+            if (!plan.isSafety && plan.objectBall != null)
+                plan.clearance = DescribeClearance(plan);
             Debug.Log($"[AI:{profile.name}] {(plan.isSafety ? "SAFETY" : "POT")} {plan.target} | " +
+                      $"{(plan.clearance != null ? plan.clearance + " | " : "")}" +
                       $"on={gameManager.CurrentTargetState}" +
                       $"{(gameManager.CurrentTargetColour.HasValue ? "/" + gameManager.CurrentTargetColour.Value : "")} " +
                       $"legalTargets={targetBuffer.Count} candidates={plan.candidatesGenerated} makeable={plan.candidateCount} | " +
@@ -1244,19 +1248,32 @@ public class SnookerAI : MonoBehaviour
                         $"throw allowed {plan.expectedThrowDegrees:F2}deg)";
         }
 
+        // Which other ball each moving ball set off first. A resting ball that starts moving right beside
+        // the cue ball or the object ball was hit by it - this is what tells a secondary collision apart
+        // from a bad contact when the object ball goes somewhere the model didn't predict.
+        var contacts = new ContactScan { objectStart = objStart };
+        var resting = new List<Rigidbody>();
+        foreach (var other in gameManager.GetBalls())
+            if (other != null && other != ball && other != cueBall && other.gameObject.activeInHierarchy)
+                resting.Add(other);
+
         float giveUp = Time.time + 20f;
         while (!gameManager.PottedThisShot.Contains(ball) && Flat3(ball.velocity).sqrMagnitude < 0.01f)
         {
             if (Time.time > giveUp || (!waitingForShot && Time.time > giveUp - 18f))
             {
-                Debug.Log($"[AI:{profile.name}] TRACK {TypeName(ball)} never moved | predicted objDev {predicted}");
+                Debug.Log($"[AI:{profile.name}] TRACK {TypeName(ball)} never moved | predicted objDev {predicted} | " +
+                          $"{plan.clearance} | {contacts.Describe()}");
                 yield break;
             }
+            ScanContacts(ball, resting, ref contacts);
             yield return new WaitForFixedUpdate();
         }
 
         // A couple of steps in, so the direction is off the contact rather than mid-collision.
+        ScanContacts(ball, resting, ref contacts);
         yield return new WaitForFixedUpdate();
+        ScanContacts(ball, resting, ref contacts);
         yield return new WaitForFixedUpdate();
         Vector3 v = Flat3(ball.velocity);
         string actual = v.sqrMagnitude > 1e-4f
@@ -1267,6 +1284,7 @@ public class SnookerAI : MonoBehaviour
         while (!gameManager.PottedThisShot.Contains(ball) && Time.time < giveUp && waitingForShot)
         {
             closest = Mathf.Min(closest, (Flat3(ball.position) - pocket).magnitude);
+            ScanContacts(ball, resting, ref contacts);
             yield return new WaitForFixedUpdate();
         }
         bool dropped = gameManager.PottedThisShot.Contains(ball);
@@ -1278,7 +1296,100 @@ public class SnookerAI : MonoBehaviour
 
         Debug.Log($"[AI:{profile.name}] TRACK {TypeName(ball)} | predicted objDev {predicted} | " +
                   $"actual objDev {actual} | closest to pocket {(dropped ? "DROPPED" : closest.ToString("F3"))} | " +
-                  $"cue rest off prediction by {restMiss:F2}");
+                  $"cue rest off prediction by {restMiss:F2} | {plan.clearance} | {contacts.Describe()}");
+    }
+
+    private struct ContactScan
+    {
+        public Vector3 objectStart;
+        public Rigidbody cueHitFirst;          // a ball the cue ball hit before the object ball moved
+        public Rigidbody objectHitFirst;       // the first ball the object ball ran into
+        public float objectTravelAtHit;
+
+        public string Describe()
+            => $"contacts: cue ball kissed {(cueHitFirst != null ? TypeName(cueHitFirst) : "none")} before the object ball, " +
+               $"object ball hit {(objectHitFirst != null ? TypeName(objectHitFirst) + $" after {objectTravelAtHit:F2}" : "none")} on its way";
+    }
+
+    // Debug only. A ball that was at rest and is now moving, and sits within half a radius of touching
+    // the cue ball or the object ball, was just hit by that ball (at 10 ms steps two balls separate by
+    // at most ~0.05 in the step the contact happens).
+    private void ScanContacts(Rigidbody ball, List<Rigidbody> resting, ref ContactScan scan)
+    {
+        float touching = BallDiameter + cue.CueBallRadius * 0.5f;
+        bool objectMoving = Flat3(ball.velocity).sqrMagnitude >= 0.01f || gameManager.PottedThisShot.Contains(ball);
+
+        for (int i = resting.Count - 1; i >= 0; i--)
+        {
+            Rigidbody other = resting[i];
+            if (other == null || !other.gameObject.activeInHierarchy) { resting.RemoveAt(i); continue; }
+            if (Flat3(other.velocity).sqrMagnitude < 0.0025f) continue;
+            resting.RemoveAt(i);
+
+            Vector3 at = Flat3(other.position);
+            if (objectMoving && scan.objectHitFirst == null && (at - Flat3(ball.position)).magnitude < touching)
+            {
+                scan.objectHitFirst = other;
+                scan.objectTravelAtHit = (Flat3(ball.position) - scan.objectStart).magnitude;
+            }
+            else if (!objectMoving && scan.cueHitFirst == null && (at - Flat3(cueBall.position)).magnitude < touching)
+            {
+                scan.cueHitFirst = other;
+            }
+        }
+    }
+
+    // Debug only. How much room the two shot lines really had, measured straight off the ball centres
+    // rather than through a sphere cast: the gap left beside the travelling ball by the nearest other
+    // ball ahead of it, in ball radii (0 = grazing, negative = in the way), plus how many balls sit
+    // within three ball widths of the object ball - the "is this a cluster shot" figure.
+    private string DescribeClearance(ShotPlan plan)
+    {
+        Vector3 objPos = Flat3(plan.objectBall.position);
+        Vector3 from = Flat3(plan.cueBallPos);
+        Vector3 contact = objPos - Flat3(plan.pocket - objPos).normalized * BallDiameter;
+        if (IdealObjectDirection(from, plan.aimDir, objPos, out Vector3 objectDir))
+            contact = objPos - objectDir * BallDiameter;
+
+        float cueGap = LineGap(from, contact, plan.objectBall, out Rigidbody cueNearest);
+        float objGap = LineGap(objPos, Flat3(plan.pocket), plan.objectBall, out Rigidbody objNearest);
+
+        int cluster = 0;
+        foreach (var other in gameManager.GetBalls())
+        {
+            if (other == null || other == plan.objectBall || other == cueBall || !other.gameObject.activeInHierarchy) continue;
+            if ((Flat3(other.position) - objPos).magnitude < BallDiameter * 3f) cluster++;
+        }
+
+        return $"gaps cue->ghost={FormatGap(cueGap, cueNearest)} obj->pocket={FormatGap(objGap, objNearest)} cluster3D={cluster}";
+    }
+
+    private static string FormatGap(float gap, Rigidbody nearest)
+        => nearest == null ? "open" : $"{gap:+0.00;-0.00}r({TypeName(nearest)})";
+
+    private float LineGap(Vector3 from, Vector3 to, Rigidbody objectBall, out Rigidbody nearest)
+    {
+        nearest = null;
+        Vector3 delta = to - from;
+        float length = delta.magnitude;
+        if (length < 1e-4f) return float.PositiveInfinity;
+        Vector3 dir = delta / length;
+
+        float best = float.PositiveInfinity;
+        foreach (var other in gameManager.GetBalls())
+        {
+            if (other == null || other == objectBall || other == cueBall || !other.gameObject.activeInHierarchy) continue;
+            Vector3 p = Flat3(other.position) - from;
+            float along = Vector3.Dot(p, dir);
+            // Only balls level with the travelling ball's path: from its start to one diameter past the end.
+            if (along <= 0f || along > length + BallDiameter) continue;
+            float side = (p - dir * Mathf.Min(along, length)).magnitude;
+            float gap = (side - BallDiameter) / cue.CueBallRadius;
+            if (gap < best) { best = gap; nearest = other; }
+        }
+        // Anything further than two ball widths off the line is irrelevant to the question.
+        if (best > 4f) nearest = null;
+        return best;
     }
 
     // CueVisualController parks the stick at sin/cos of this angle around the ball and points it back
