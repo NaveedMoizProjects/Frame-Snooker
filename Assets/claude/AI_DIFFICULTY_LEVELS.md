@@ -43,7 +43,7 @@ and nothing more.
 | `safetyProbability` | `0.1–0.18` (shipped; `0.15–0.25` originally, roll when no candidate scores above `0.4`) | Plays a genuine safety sometimes, not every time it's the "correct" move — this is deliberate, not perfect, snooker awareness. Dialed back once the per-visit target rose to 7: the original roll frequency meant a real chance of voluntarily ending a run on almost every moderate pot, which was fighting the higher target directly. |
 | `positionWeight` | `0.3` | Has some sense of leaving itself a reasonable next shot, not full lookahead. |
 | `deliberateSpinUsage` | `basic` — will choose top-spin/stun deliberately for simple position, occasional backspin on straightforward shots; won't attempt precise combination side-spin position play | Matches a club-level player's spin usage. |
-| `softPotCap` | `7–9` balls per visit (was `4–5`) | Re-derived when the per-visit target rose to 7 (4 reds + 3 colours) - at the old `4-5`, the pressure ramp was already inflating error for balls 5-7, actively working against the new floor before it could even be reached. |
+| `softPotCap` | `6–8` balls per visit (was `4–5`, then `7–9`) | Re-derived again when the target was corrected down to 6 (3 reds + 3 colours) - see the correction note below. |
 | `pressureRamp` | `+80%` to error terms per ball beyond cap | Milder choke than beginner — a decent break is plausible but a full clearance is rare. |
 | Candidate survey | Compares top 6 (was top 2-3) by `finalScore`, picks the best | Logged play showed ~25% of Medium's pot decisions had more than 3 *makeable* candidates on the table - `finalScore` was never even computed for those, so a genuinely better-positioned candidate ranked 4th+ by raw pot score could never be picked. Raised to 6 (comfortably above the observed max), still well below Pro's uncapped survey. |
 
@@ -61,7 +61,7 @@ and has some idea of strategy — a casual/new player will lose to this level re
 | `safetyProbability` | `0.3–0.45` (shipped; was `0.5–0.7`), roll when no candidate scores above `0.35` (was `0.45`) | Plays proper safeties/snookers specifically when there's no good pot, like a real player would, rather than randomly. Dialed back once the per-visit target rose to 12: at the original 0.5-0.7 roll rate, a compounding chance of voluntarily stopping on nearly every moderate pot made a 12-ball run close to impossible regardless of potting accuracy. |
 | `positionWeight` | `0.6` | Genuinely plans position for the next ball, will sometimes take a slightly harder pot because it leaves much better position than the "easier" alternative. |
 | `deliberateSpinUsage` | `full` — uses screw/follow/side spin deliberately for position control, including combination side-spin+follow/screw | Full toolbox, matching real professional cueing. |
-| `softPotCap` | `12–14` balls per visit (was `7–8`) | Re-derived when the per-visit target rose to 12 (6 reds + 6 colours) - at the old `7-8`, pressure was already inflating error for balls 8-12, working against the new floor before it could be reached. High ceiling — capable of real breaks. |
+| `softPotCap` | `10–12` balls per visit (was `7–8`, then `12–14`) | Re-derived again when the target was corrected down to 10 (5 reds + 5 colours) - see the correction note below. High ceiling — capable of real breaks. |
 | `pressureRamp` | `+40%` to error terms per ball beyond cap, and additionally scale `aimErrorDegrees` up slightly (`+0.1°` per ball already potted this visit, uncapped) even before the soft cap | Even a "pro" gets slightly less precise the longer a break goes on — keeps very long clearances rare rather than routine, without hard-blocking them. |
 | Candidate survey | Full survey of all valid candidates, scored by `finalScore` (pot difficulty + position) | Closest to genuine shot selection. |
 
@@ -69,6 +69,42 @@ and has some idea of strategy — a casual/new player will lose to this level re
 strategic sense from the human — but structurally guaranteed non-zero miss chance on
 every shot (see golden rule) means it is never literally unbeatable. A strong human
 player should still be able to win a meaningful fraction of frames.
+
+### Correction (September 2026): the last several passes over-loosened Medium/Pro's gates
+
+Three rounds in a row of "loosen `makeabilityErrorFraction`/`minAcceptablePotScore` further to
+chase a higher raw pot-count target" pushed Pro's own pot-attempt failure rate to **24%**
+(measured against the same test methodology as every other number in this doc) — visibly
+inaccurate potting, and the highest failure rate measured anywhere in this project. Raw
+pot-count was never the only goal; it went too far in that direction at the cost of the AI
+actually looking competent.
+
+**The targets themselves are now revised down, and accuracy/fouls take priority over hitting
+them:**
+
+- **Pro: at least 10 balls per visit (5 reds + 5 colours), not 12.** If reds run out first,
+  complete clearance of the remaining colours. Must avoid fouls and visibly play intelligent,
+  high-percentage shots — not just attempt anything makeable.
+- **Medium: at least 6 balls per visit (3 reds + 3 colours), not 7.** If colours are on the
+  table when reds run out, pot 3-4 of them.
+
+`makeabilityErrorFraction` and `minAcceptablePotScore` were both raised well past their
+original shared baseline (Pro: fraction `0.12→0.3`, threshold `0.1→0.25`; Medium: fraction
+`0.13→0.25`, threshold `0.2→0.3`), `safetyProbability` raised back up (Pro `0.3-0.45→0.4-0.55`,
+Medium `0.1-0.18→0.15-0.25`, the latter back to its original spec value), and `softPotCap`
+re-derived to the new lower targets (Pro `10-12`, Medium `6-8`). Same seed, before/after:
+
+| Level | Pot-attempt failure | Pots/visit (mean) | Safety fouls |
+|---|---|---|---|
+| Pro, before this correction | 24% (15/62) | 2.67 | 0/4 |
+| Pro, after | **10% (6/62)** | **3.17** | 0/13 |
+| Medium, after | 15% (10/66) | 3.11 | 3/8 (small sample) |
+
+Raising the bar didn't just improve accuracy - mean pots/visit went *up* too (fewer failed
+marginal attempts ending a visit early more than compensates for being pickier about what's
+attempted). Neither level reliably reaches its new floor on every visit yet; most zero-pot
+visits are the random open-table test harness handing the AI a table with no genuinely good
+pot on it at all (now that the bar for "genuinely good" is higher), not a miss.
 
 All three levels also use `basePowerFraction` (`SnookerAI` component, per scene) `0.85`
 for safety/escape power only - pot power is a separate calculation
@@ -88,17 +124,21 @@ averaged across a whole match, NOT "sometimes hits this, sometimes doesn't." Con
 Human's turn ends (miss/foul) → it's now the AI's turn (one "visit" starts)
   → AI must pot AT LEAST this many balls before its visit ends:
        Beginner: 2-3 balls in THIS visit
-       Medium:   7 balls in THIS visit (4 reds + 3 colours, following the normal
-                 red-then-colour alternation - not 7 reds or 7 colours)
-       Pro:      12 balls in THIS visit (6 reds + 6 colours, i.e. six full red-then-
+       Medium:   6 balls in THIS visit (3 reds + 3 colours, following the normal
+                 red-then-colour alternation - not 6 reds or 6 colours). If colours are
+                 still on the table when reds run out, pot 3-4 of them.
+       Pro:      10 balls in THIS visit (5 reds + 5 colours, i.e. five full red-then-
                  colour pairs) - OR, if reds happen to run out partway through a visit,
                  the remaining balance of that visit should aim for full clearance of
                  whatever colours are left (up to 6: Yellow/Green/Brown/Blue/Pink/Black)
-                 rather than the visit ending early just because the 12 raw-count number
-                 was reached by a different mix
+                 rather than the visit ending early just because the 10 raw-count number
+                 was reached by a different mix. Must avoid fouls and visibly play
+                 intelligent, high-percentage shots - accuracy and safe shot selection
+                 take priority over squeezing out extra balls (see the correction note
+                 below - these numbers were previously 7/12 and were pulled back down).
   → only after reaching (at least) that count is it acceptable for the AI's visit to
      end (via a miss or foul) - a visit that pots 0-1 balls and then ends is a FAIL for
-     Beginner/Medium, and a visit that pots 0-4 balls and then ends is a FAIL for Pro,
+     Beginner/Medium, and a visit that pots 0-3 balls and then ends is a FAIL for Pro,
      for that specific visit.
 ```
 
@@ -211,13 +251,16 @@ constantly" even if the physical aim error itself is reasonable for that level.
 - [ ] Beginner pots at least 2–3 balls in EACH individual AI visit (tested across
       several separate visits, not just once), and rarely exceeds 3–4.
 - [ ] Medium sometimes plays a visible safety shot instead of a risky pot.
-- [ ] Medium pots at least 7 balls (4 reds + 3 colours) in EACH individual AI visit
-      (tested across several separate visits, not just once), and rarely exceeds 9.
+- [ ] Medium pots at least 6 balls (3 reds + 3 colours, or 3-4 colours if colours are on
+      the table when reds run out) in EACH individual AI visit (tested across several
+      separate visits, not just once), and rarely exceeds 8.
 - [ ] Pro plays a deliberate safety when no good pot exists, not just "always attempt."
 - [ ] Pro can occasionally miss even a straightforward-looking pot (error floor working).
-- [ ] Pro pots at least 12 balls (6 reds + 6 colours, or full clearance of the colours
+- [ ] Pro's shot selection is visibly intelligent (position play, safeties when
+      appropriate) and it avoids fouls - accuracy is not sacrificed for raw pot count.
+- [ ] Pro pots at least 10 balls (5 reds + 5 colours, or full clearance of the colours
       left if reds ran out first) in EACH individual AI visit (tested across several
-      separate visits, not just once), rarely exceeds 14, and long visits get visibly
+      separate visits, not just once), rarely exceeds 12, and long visits get visibly
       shakier (later shots in a long break miss more than early ones).
 - [ ] None of the three levels ever produces `aimErrorDegrees == 0` or
       `powerErrorPercent == 0` on any single shot.
