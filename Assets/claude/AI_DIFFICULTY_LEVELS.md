@@ -48,9 +48,38 @@ deliberately missing).**
 | Medium | 42 | 1.55 | 26% | 65/67 |
 | Pro | 484 | 2.11 | 34% (5+: 16%) | 1031/1078 |
 
-The per-visit minimums below are **not yet met on every visit**. Nearly all zero visits start
-with no makeable pot on the table (the availability ceiling above), not with a miss. The
-biggest remaining lever is the physics throw noise, tracked as a separate follow-up.
+**Second measured pass (September 2026), after loosening `makeabilityErrorFraction` and
+`minAcceptablePotScore` per level, raising `basePowerFraction` to `0.85`, fixing the
+missed-colour foul bug, and raising Beginner's candidate survey to 2** (18 visits/level,
+fresh random open table per visit, same seed across levels):
+
+| Level | Visits | Balls per visit (mean) | Visits hitting its minimum | Pot attempts dropped |
+|---|---|---|---|---|
+| Beginner (min 2) | 18 | 1.78 | 7/18 | 30/49 (61%) |
+| Medium (min 3) | 18 | 3.17 | 8/18 | 56/69 (81%) |
+| Pro (min 5) | 18 | 3.78 | 6/18 | 66/75 (88%) |
+
+Ordering holds on the measured numbers, not just the settings: pot rate Pro > Medium >
+Beginner, and pot quality (share of attempts that actually drop) Pro > Medium > Beginner.
+An earlier, more aggressive setting for Pro (`makeabilityErrorFraction 0.08`,
+`minAcceptablePotScore 0.1`) was tried first and rejected - it raised Pro's *attempt* rate
+but also its miss rate enough (88%→78% dropped) that its measured pots/visit (3.22) fell to
+within noise of Medium's, breaking the ordering. `0.18`/`0.15` was the value that actually
+grew Pro's lead.
+
+The per-visit minimums are **still not met on every visit** - 18 visits/level is a sanity
+check, not a statistically solid measurement, and this remains true at the sample sizes
+tested before this pass too. Nearly all zero-pot visits start with no makeable pot on the
+table (the availability ceiling above), not with a miss. The biggest remaining lever is the
+physics throw noise, tracked as a separate follow-up.
+
+**`basePowerFraction` 0.85** (was `0.1`, briefly `0.8`) drives safety/escape power only -
+pot power is entirely separate (`PotPowerFor`/`ControlledPotPowerCeiling`) and unaffected.
+Safety shots now go out around 0.7 power. Combined with the missed-colour foul fix, safety
+fouls measured 2/16 (12.5%) across the three levels' 18-visit checks - down from the 11/22
+(50%) measured at power 1.0 before that foul-rule fix existed, when most of those fouls were
+the "hit the right ball on a colour, potted nothing" bug being scored as a foul rather than a
+legal miss.
 
 ## Golden rule for all three levels
 
@@ -66,13 +95,14 @@ and "easy but not a pushover on a literal open pot" both true at the same time.
 |---|---|---|
 | `aimErrorDegrees` | random in `[4°, 8°]` per shot | Straight/easy pots mostly go in; anything with real cut angle misses often. |
 | `powerErrorPercent` | `±25%` | Power controls are inconsistent — under/over-hit is common. |
-| `minAcceptablePotScore` | `0.35` (was `0.6`) | Still won't go for a thin long cut, but goes for ordinary pots. At 0.6, most visits ended on "best pot under 0.6" with the best pot logged at 0.43–0.59, so Beginner averaged 0.7–0.85 pots per visit against its 2–3 target. |
+| `minAcceptablePotScore` | `0.15` (was `0.6`, then `0.35`) | Willing to attempt almost any legal pot rather than fall back to a soft tap. At 0.6 most visits ended on "best pot under 0.6" (0.7–0.85 pots/visit); 0.35 alone still wasn't enough throughput. |
+| `makeabilityErrorFraction` | `0.5` | Doesn't gate attempts (Beginner never filters candidates by makeability, see below) - only affects candidate tie-breaking, so this is largely inert for Beginner. Kept well above Medium's/Pro's so it never accidentally becomes the loosest level if that changes. |
 | `safetyProbability` | `0.0` | Beginner never *deliberately* plays safe — it always just goes for the ball on, even when that's a bad idea. Any resulting snooker on the human is pure accident. |
-| `positionWeight` | `0.0` | No positional planning at all — picks the single easiest legal pot each shot, ignores where the cue ball ends up. |
+| `positionWeight` | `0.0` | No positional planning at all — picks the easiest legal pot each shot, ignores where the cue ball ends up. |
 | `deliberateSpinUsage` | `none` | Always strikes dead-center (`spinOffset = (0,0)`) — no intentional follow/screw/side. Any spin-like outcome is coincidental from mis-hits. |
 | `softPotCap` | `2–3` balls per visit | After this many pots in one visit, see pressure ramp below. |
 | `pressureRamp` | `+150%` to `aimErrorDegrees` and `powerErrorPercent` per ball potted beyond the cap | Simulates "choking" — makes running much further than 2-3 balls rare without hard-blocking it outright. |
-| Candidate survey | Only evaluates the single lowest-`difficulty` candidate, doesn't compare alternatives | Matches "just goes for the obvious ball" beginner behavior. |
+| Candidate survey | `2` (was `1`) | Compares the top 2 candidates instead of blindly taking the single lowest-`difficulty` one - still far shallower than Medium's 3 or Pro's full survey. |
 
 **Target outcome:** beatable by literally anyone who can aim reasonably straight — the
 beginner AI is a soft target that occasionally strings a couple of easy balls together
@@ -84,7 +114,8 @@ and nothing more.
 |---|---|---|
 | `aimErrorDegrees` | random in `[1.5°, 3°]` per shot | Noticeably better than beginner but still misses real cut shots at a real rate. |
 | `powerErrorPercent` | `±10%` | Reasonably consistent, not pinpoint. |
-| `minAcceptablePotScore` | `0.4` | Willing to attempt moderately harder shots than beginner. |
+| `minAcceptablePotScore` | `0.25` (was `0.4`) | Willing to attempt moderately harder shots than beginner, and more of them. |
+| `makeabilityErrorFraction` | `0.2` (was the shared `0.25`) | Slightly more forgiving than the original shared gate. `0.15` was tried and tested looser still, but pushed Medium's pot-attempt failure rate up (19→22% in one 18-visit check) enough to blur the gap with Pro rather than clearly extending Medium's run length - `0.2` kept the throughput gain without that. |
 | `safetyProbability` | `0.15–0.25` (roll when no candidate scores above `0.5`, or when the best pot would leave an easy follow-up for the opponent per the positional check) | Plays a genuine safety sometimes, not every time it's the "correct" move — this is deliberate, not perfect, snooker awareness. |
 | `positionWeight` | `0.3` | Has some sense of leaving itself a reasonable next shot, not full lookahead. |
 | `deliberateSpinUsage` | `basic` — will choose top-spin/stun deliberately for simple position, occasional backspin on straightforward shots; won't attempt precise combination side-spin position play | Matches a club-level player's spin usage. |
@@ -101,7 +132,8 @@ and has some idea of strategy — a casual/new player will lose to this level re
 |---|---|---|
 | `aimErrorDegrees` | scaled by shot difficulty: `[0.3°, 0.6°]` on easy shots (`potScore > 0.8`) up to `[1.0°, 1.5°]` on hard shots (`potScore < 0.3`) | Real top players still miss hard cuts at a meaningful rate — never treat "pro" as "perfect." |
 | `powerErrorPercent` | `±4%` | Very consistent, not flawless. |
-| `minAcceptablePotScore` | `0.2` | Willing to attempt genuinely difficult pots when they're the percentage play. |
+| `minAcceptablePotScore` | `0.15` (was `0.2`) | Willing to attempt genuinely difficult pots when they're the percentage play, and rarely bails to a soft fallback. |
+| `makeabilityErrorFraction` | `0.18` (was the shared `0.25`) | Loosened further than Medium's, since Pro's own aim error is tiny enough that even a marginal pot mostly still drops. `0.08` was tried first and was too loose in practice: attempts rose but so did their failure rate (12→22%), closing the gap with Medium instead of extending Pro's runs - `0.18` gave both more attempts and a lower failure rate than the original `0.25`. |
 | `safetyProbability` | high whenever no candidate scores above `0.45`, roughly `0.5–0.7` in those specific situations (not a flat global chance — situational, per §5 of the shot-selection doc) | Plays proper safeties/snookers specifically when there's no good pot, like a real player would, rather than randomly. |
 | `positionWeight` | `0.6` | Genuinely plans position for the next ball, will sometimes take a slightly harder pot because it leaves much better position than the "easier" alternative. |
 | `deliberateSpinUsage` | `full` — uses screw/follow/side spin deliberately for position control, including combination side-spin+follow/screw | Full toolbox, matching real professional cueing. |

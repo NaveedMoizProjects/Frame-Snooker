@@ -70,23 +70,35 @@ the way the ball will really travel:
   usually still drops) along its line until it reaches the pocket trigger's capture distance.
   Any cushion or jaw collider on the way rejects the pot. Checked against 80 rolled balls: 73
   agreed, and it never said "drops" for a ball that stayed out.
-- **The level's own error.** `IsMakeableAtThisSkill` swings the aim by ± a quarter of the middle of
-  the level's aim-error range (`MakeabilityErrorFraction`) and follows each through the exact
-  contact geometry (a cut multiplies the error). It adds the same share of the leftover throw
-  uncertainty and requires both sides to still drop and stay clear of other balls. Larger errors may
-  not pot, so tight pots are still missed some of the time.
+- **The level's own error.** `IsMakeableAtThisSkill` swings the aim by ± a share of the middle of
+  the level's aim-error range (`profile.makeabilityErrorFraction`, per-level - not a shared
+  constant) and follows each through the exact contact geometry (a cut multiplies the error). It
+  adds the same share of the leftover throw uncertainty and requires both sides to still drop and
+  stay clear of other balls. Larger errors may not pot, so tight pots are still missed some of the
+  time.
   The full midpoint was measured to be far too cautious. Medium dropped 80 of the 81 pots it
   attempted, yet ~85% of its visits ended on "no makeable pot". When it attempted the pots that gate
   rejected, 65 of 91 still went in. Same seed, 60 visits each:
 
   | Share of the error | Medium pots/visit | Pro pots/visit (5+ visits) | Attempts potted |
   |---|---|---|---|
-  | 1.0 (old) | 1.37 | 2.25 (10/60) | 93–98% |
+  | 1.0 (old, shared) | 1.37 | 2.25 (10/60) | 93–98% |
   | 0.5 | 2.40 | — | 92% |
-  | 0.25 (shipped) | 2.82 | 3.73 (22/60) | 87–89% |
+  | 0.25 (shared, first pass) | 2.82 | 3.73 (22/60) | 87–89% |
 
-  Beginner never filters on makeability and is unchanged by it (0.70–0.85 per visit). Its visits
-  mostly ended with the best pot under `minAcceptablePotScore` 0.6, now lowered to 0.35.
+  Made per-level in the next pass, since a shared value can't let Pro (tiny real aim error, so even
+  a loosely-gated pot mostly still drops) run further ahead of Medium than Medium can run ahead of
+  Beginner. Loosening Pro's further than Medium's (`0.08` vs staying at `0.15`) was tried first and
+  *broke* the pot-rate/quality ordering in an 18-visit check: Pro's own attempt failure rate rose
+  from 12% to 22%, closing the gap with Medium instead of extending it. Shipped: Medium `0.2`, Pro
+  `0.18` - both looser than the original shared `0.25`, but calibrated so each level's measured
+  pots/visit and pot-attempt success rate stay clearly ordered Pro > Medium > Beginner (see
+  `AI_DIFFICULTY_LEVELS.md`'s second measured pass).
+
+  Beginner never filters candidates on makeability (it's never `PlaysDeliberateSafety`) so this
+  fraction barely affects it; its throughput instead comes from `minAcceptablePotScore`, lowered
+  0.6 → 0.35 → 0.15, and `candidateSurveyCount` raised 1 → 2 (still below Medium's 3 and Pro's full
+  survey).
 - **Next-shot quality** (§4, §5.1) only credits a leave with a pot the level could make by the
   same test. It is averaged over the predicted cue-ball rest and ±30% of its travel, because the
   rest estimate is typically 0.1–2 units out.
@@ -177,11 +189,12 @@ Measured in Play mode through the real pipeline, not assumed:
   soft contact). Pots use `PotPowerFor`, escapes a fixed 0.3, and the break `breakPowerFraction`.
   Measured straight shots through the real strike pipeline, as power → launch speed → total roll:
   0.10 → 2.7 m/s → 3.6 units, 0.15 → 3.7 → 6.3, 0.25 → 5.6 → 13.8, 0.40 → 8.4 → 20.8,
-  1.0 → 19.6 → 65.8 (table diagonal 16.6). Safeties at spec power go out around 0.12, which really is
-  soft. But only 4 of 115 logged safeties failed to reach the ball. Raising it to 1.0 sent safeties
-  out at ~0.69 and they fouled 11 of 22. The high safety foul rate is the rules issue in
-  `GAME_MECHANICS.md` (on a colour, hitting it without potting anything is scored as a foul), not
-  power.
+  1.0 → 19.6 → 65.8 (table diagonal 16.6). At spec power (0.10) safeties went out around 0.12,
+  and felt too weak in play even though only 4 of 115 logged safeties actually failed to reach the
+  ball. Raising it to 1.0 sent safeties out at ~0.69 and fouled 11 of 22 - but that was almost
+  entirely the missed-colour foul bug (below), not the extra pace: with that bug fixed and
+  `basePowerFraction` shipped at 0.85 (safeties out around 0.7), an 18-visit check across all three
+  levels logged 16 safety attempts and 2 fouls (12.5%).
 - **Sight margin near clusters.** `sightMarginBallRadii` stays at 0.25. With the clearance logging
   below, no run showed misses concentrating on shots with a tight gap beside the line, and no failure
   started with the object ball clipping a neighbour. The AI hardly ever takes a pot on a red inside a

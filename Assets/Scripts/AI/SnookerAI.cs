@@ -63,16 +63,6 @@ public class SnookerAI : MonoBehaviour
 
     private const float MaxCutAngleDegrees = 85f;
 
-    // How much of a level's own aim error (and the leftover throw scatter) a pot has to survive before
-    // the AI counts it as makeable. The full middle of the range was far too cautious: Medium dropped 80
-    // of 81 pots it attempted and ended ~85% of visits on "no makeable pot". Letting it attempt the pots
-    // that gate rejected, 65 of 91 still went in. The hardest pots a quarter of the error admits drop
-    // 53-70% of the time; everything past half the error drops 69% and up.
-    // Same seed, 60 visits each: Medium 1.37 -> 2.82 pots per visit (1.0 / 0.5 / 0.25 of the error:
-    // 1.37 / 2.40 / 2.82), Pro 2.25 -> 3.73 (5+ in 10 -> 22 of 60), with 87-89% of attempts potted.
-    // Beginner is unchanged - it never filters on this, its visits end on minAcceptablePotScore.
-    private const float MakeabilityErrorFraction = 0.25f;
-
     // Impact parameters sampled when building a safety: 0 is a full-ball hit, +/-0.85 is as thin as
     // the AI will try to clip the ball on.
     private static readonly float[] SafetyContacts = { -0.85f, -0.6f, -0.3f, 0f, 0.3f, 0.6f, 0.85f };
@@ -801,7 +791,7 @@ public class SnookerAI : MonoBehaviour
     {
         Vector2 range = profile.AimErrorRangeFor(c.potScore);
         float gateError = ((range.x + range.y) * 0.5f + profile.aimErrorDegreesPerBallPotted * ballsPottedThisVisit)
-                         * PressureMultiplier() * MakeabilityErrorFraction;
+                         * PressureMultiplier() * profile.makeabilityErrorFraction;
 
         // Real height for the jaw cast - a flattened position would sweep along the floor plane.
         Vector3 objPos = c.objectBall.position;
@@ -813,7 +803,7 @@ public class SnookerAI : MonoBehaviour
         // which steers the AI towards straighter pots where there is little to throw. (0.6x was tried
         // and left 6 of 11 visits with nothing makeable on - the misses it was meant to stop turned out
         // to be under-hit balls, fixed in PotPowerFor.)
-        float throwUncertainty = (0.2f + 0.4f * throwDegrees) * MakeabilityErrorFraction;
+        float throwUncertainty = (0.2f + 0.4f * throwDegrees) * profile.makeabilityErrorFraction;
 
         for (float sign = -1f; sign <= 1f; sign += 2f)
         {

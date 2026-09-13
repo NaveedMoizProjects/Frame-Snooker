@@ -38,6 +38,15 @@ public class AIDifficultyProfile : ScriptableObject
     [Tooltip("Best candidate must score at least this to be attempted at all; below it the AI plays safe.")]
     [Range(0f, 1f)] public float minAcceptablePotScore = 0.6f;
 
+    [Tooltip("Share of this level's own aim-error range (plus leftover throw scatter) a pot must " +
+             "survive to count as 'makeable' (see IsMakeableAtThisSkill in AI_SHOT_SELECTION.md). " +
+             "Lower = more forgiving gate = more pots attempted, at the cost of some that don't drop. " +
+             "A more capable level (smaller real aim error) can afford to set this lower, since even a " +
+             "loosely-gated pot mostly still goes in for it - measured: at 1.0 Medium attempted pots " +
+             "that dropped 93-98% of the time but ended most visits on 'no makeable pot'; at 0.25 it " +
+             "attempted far more (dropping 87-89%) and pots per visit roughly doubled.")]
+    [Range(0.01f, 1f)] public float makeabilityErrorFraction = 0.25f;
+
     [Tooltip("Chance of playing safety instead of the available pot, rolled in [X, Y]. Zero means the " +
              "level never deliberately plays safe and never deliberately snookers.")]
     public Vector2 safetyProbability = Vector2.zero;

@@ -8705,7 +8705,7 @@ MonoBehaviour:
   profile: {fileID: 11400000, guid: e3e75dc3dc4a48042b3c203070de8296, type: 2}
   aiPlayerIndex: 1
   thinkingDelaySeconds: {x: 0.5, y: 1.5}
-  basePowerFraction: 0.1
+  basePowerFraction: 0.85
   powerPerTableDiagonal: 0.35
   safetyPowerMultiplier: 0.8
   breakPowerFraction: 0.35
