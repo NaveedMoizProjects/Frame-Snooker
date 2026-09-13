@@ -86,7 +86,7 @@ the way the ball will really travel:
   | 0.25 (shipped) | 2.82 | 3.73 (22/60) | 87–89% |
 
   Beginner never filters on makeability and is unchanged by it (0.70–0.85 per visit). Its visits
-  mostly end with the best pot under `minAcceptablePotScore` 0.6.
+  mostly ended with the best pot under `minAcceptablePotScore` 0.6, now lowered to 0.35.
 - **Next-shot quality** (§4, §5.1) only credits a leave with a pot the level could make by the
   same test. It is averaged over the predicted cue-ball rest and ±30% of its travel, because the
   rest estimate is typically 0.1–2 units out.

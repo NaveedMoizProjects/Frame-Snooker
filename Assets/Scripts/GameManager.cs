@@ -943,6 +943,14 @@ public class GameManager : MonoBehaviour
                 legal = true;
                 points = BallValue[target];
             }
+            else if (PottedThisShot.Count == 0)
+            {
+                // Hit the colour that was on and potted nothing: a legal miss, same as on Red - no
+                // points, the turn simply passes. Scoring it as a foul penalised every missed colour
+                // and every safety played on a colour.
+                legal = true;
+                points = 0;
+            }
             else
             {
 

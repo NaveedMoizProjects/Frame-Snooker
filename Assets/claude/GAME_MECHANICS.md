@@ -144,8 +144,9 @@ Single function, runs once per completed shot, decision table roughly:
 - **On Red:** foul if cue ball potted, nothing hit, first contact wasn't a red, or any
   non-red ball was potted this shot. Otherwise legal, points = (reds potted × 1).
 - **On Colour:** foul if cue ball potted, nothing hit, first contact wasn't the
-  nominated/sequence colour, or anything other than exactly that one colour was potted.
-  Otherwise legal, points = that colour's value.
+  nominated/sequence colour, or anything was potted other than exactly that one colour.
+  Potting that colour is legal, points = that colour's value. Hitting it and potting nothing
+  is a legal miss: no points, and the turn passes.
 - All foul point values are floored at `Math.Max(4, ...)` per standard snooker minimum
   foul value.
 - Legal + 0 points (a miss with nothing potted) → turn passes, no score.

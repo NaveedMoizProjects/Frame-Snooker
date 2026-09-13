@@ -66,7 +66,7 @@ and "easy but not a pushover on a literal open pot" both true at the same time.
 |---|---|---|
 | `aimErrorDegrees` | random in `[4°, 8°]` per shot | Straight/easy pots mostly go in; anything with real cut angle misses often. |
 | `powerErrorPercent` | `±25%` | Power controls are inconsistent — under/over-hit is common. |
-| `minAcceptablePotScore` | `0.6` | Only attempts the fairly easy pots it can actually see; won't blindly go for a 1%-chance thin cut. |
+| `minAcceptablePotScore` | `0.35` (was `0.6`) | Still won't go for a thin long cut, but goes for ordinary pots. At 0.6, most visits ended on "best pot under 0.6" with the best pot logged at 0.43–0.59, so Beginner averaged 0.7–0.85 pots per visit against its 2–3 target. |
 | `safetyProbability` | `0.0` | Beginner never *deliberately* plays safe — it always just goes for the ball on, even when that's a bad idea. Any resulting snooker on the human is pure accident. |
 | `positionWeight` | `0.0` | No positional planning at all — picks the single easiest legal pot each shot, ignores where the cue ball ends up. |
 | `deliberateSpinUsage` | `none` | Always strikes dead-center (`spinOffset = (0,0)`) — no intentional follow/screw/side. Any spin-like outcome is coincidental from mis-hits. |
