@@ -487,11 +487,30 @@ public class SnookerAI : MonoBehaviour
     // under-hit: logged misses left at 0.85-2.6 m/s for 1.6-5.7 units and stopped 1.3-2.7 short of
     // the pocket. Object balls were measured losing about 2.1 (m/s)^2 per unit rolled; this asks for
     // enough to get there with a unit and a half to spare, works back through the cut and the cue
-    // ball's own fall-off (3.6 per unit - over eight units it lost ~3.4, more than short shots show),
-    // and leaves headroom for this level's worst under-hit so a power error alone doesn't stop it short.
+    // ball's own fall-off, and leaves headroom for this level's worst under-hit so a power error
+    // alone doesn't stop it short.
+    //
+    // Stale as of a2bcddc (2026-09-14, BallRollingFriction.slidingFriction 0.2 -> 0.26 for spin feel):
+    // the object ball leaves a strike with zero spin, so its whole post-impact loss is the same
+    // slide-then-roll model BallRollingFriction runs on every ball - it isn't exempt just because
+    // this formula lives in a different script. For a ball hit with no initial spin, standard
+    // skid-to-roll kinematics give distance-per-speed-squared as
+    // g / (12/(49*slidingFriction) + 25/(98*rollingFriction)); plugging in this project's actual
+    // live values (slidingFriction 0.26, rollingFriction 0.13, g 9.81) gives ~3.38, not 2.1 - the
+    // 2.1 figure was measured against the pre-bump 0.2 slidingFriction and never re-checked after.
+    // Confirmed live: pots on short/straight lines (cut0 potScore0.89, cut7 potScore0.75) were
+    // landing with near-zero aim/angle error yet still stopping visibly short of the pocket -
+    // an undershoot signature, not a miss-the-angle one. Raised to match; if slidingFriction or
+    // rollingFriction get re-tuned again, re-derive this the same way rather than leaving it stale
+    // a second time.
+    //
+    // The cue ball's own pre-impact fall-off (used to be a separate hardcoded 3.6 here) now reuses
+    // CueBallFallOffPerUnit (see ImpactSpeed) - that constant was re-measured live from 6 real shots
+    // and came out ~6.0, well above the 3.6 this used to hardcode independently. One physical
+    // quantity, one constant, instead of three copies silently drifting apart.
     private float PotPowerFor(ShotCandidate c)
     {
-        float objectSpeedSq = 2.1f * (c.objectToPocket + 1.5f);
+        float objectSpeedSq = 3.38f * (c.objectToPocket + 1.5f);
         // Confirmed bug (September 2026): this floor was well above cos(MaxCutAngleDegrees) = cos(85) =
         // 0.087, so every candidate this thin (a real, legal, sub-85deg cut - not a hypothetical) had its
         // needed impact speed silently computed off 0.35 instead of its own actual cosine. At 75deg that's
@@ -502,7 +521,7 @@ public class SnookerAI : MonoBehaviour
         // rejected past MaxCutAngleDegrees), not shave real power off every legal thin cut.
         float cos = Mathf.Max(0.05f, Mathf.Cos(c.cutAngle * Mathf.Deg2Rad));
         float impactSq = objectSpeedSq / (cos * cos);
-        float atOneUnitSq = impactSq + 3.6f * Mathf.Max(0f, c.cueToGhost - 1f);
+        float atOneUnitSq = impactSq + CueBallFallOffPerUnit * Mathf.Max(0f, c.cueToGhost - 1f);
 
         float needed = Mathf.Sqrt(atOneUnitSq) / 21.6f * (1f + profile.powerErrorPercent * 0.01f);
         // Paced off what the pot needs alone, not PowerFor: tying pots to basePowerFraction meant the only
@@ -518,12 +537,15 @@ public class SnookerAI : MonoBehaviour
     // first, so the extra pace itself was sending the ball off line. The ceiling keeps pot pace (position
     // play's extra pace included) at or under that speed, allowing for this level's worst over-hit. A pot
     // that genuinely needs more still gets it; makeability then judges it at that pace.
+    // Tried 6.5 -> 7.5 for firmer pots (2026-09-15): confirmed in live play to cost more pots than
+    // it gained, exactly as the bucket data above predicts. Reverted - don't retry without a real
+    // fix to the underlying miss cause first (see [[project-safety-roll-tradeoff]]-style precedent).
     private const float MaxControlledImpactSpeed = 6.5f;
 
     private float ControlledPotPowerCeiling(float cueToGhost, float needed)
     {
-        // Inverse of ImpactSpeed for a firm stroke (speed squared falling ~4 per unit).
-        float atOneUnit = Mathf.Sqrt(MaxControlledImpactSpeed * MaxControlledImpactSpeed + 4f * Mathf.Max(0f, cueToGhost - 1f));
+        // Inverse of ImpactSpeed - same CueBallFallOffPerUnit, not an independent guess.
+        float atOneUnit = Mathf.Sqrt(MaxControlledImpactSpeed * MaxControlledImpactSpeed + CueBallFallOffPerUnit * Mathf.Max(0f, cueToGhost - 1f));
         float ceiling = atOneUnit / 21.6f / (1f + profile.powerErrorPercent * 0.01f);
         return Mathf.Min(powerFractionLimits.y, Mathf.Max(ceiling, needed));
     }
@@ -780,14 +802,24 @@ public class SnookerAI : MonoBehaviour
         return cutShape * speedScale * topspin * sliding;
     }
 
-    // Cue ball speed arriving at the object ball. Power fraction to launch speed and the fall-off per
-    // unit travelled are both read off the same calibration shots (1 unit: 3.3 m/s at 0.15 power,
-    // 5.4 at 0.25, 6.7 at 0.32; speed squared dropping about 4 per unit for firm shots, 2.6 for soft).
+    // Cue ball speed² falling per unit travelled before it reaches the object ball. Used to be a
+    // Lerp(2.6, 4, ...) blended by shot firmness (and duplicated as separate hardcoded 3.6/4f
+    // constants in PotPowerFor/ControlledPotPowerCeiling below - three numbers for one physical
+    // quantity, silently free to drift apart). Re-measured live (2026-09-15) by backing out real
+    // impact speed from logged pots (actual object-ball launch speed / cos(cutAngle), which this
+    // file's own PotPowerFor comment already treats as the impact-speed relationship) across 6 real
+    // AI shots spanning cueToGhost 3.97-12.33, both spin 0 and backspin -0.6, both "soft" and "firm"
+    // launch speeds: implied fallOff came out 5.47/6.66/5.86/6.70/5.54/6.16 - a tight band (avg 6.07)
+    // showing no clear dependence on firmness, unlike the old blend's 2.6-4.0 range. The launch-speed
+    // constant (21.6 = atOneUnit/powerFraction) is left alone - it's a separate calibration (speed at
+    // zero distance) unaffected by the friction model, and the 3-point check behind it (3.3 m/s at
+    // 0.15, 5.4 at 0.25, 6.7 at 0.32 -> ~21-22 each) still holds up.
+    private const float CueBallFallOffPerUnit = 6.0f;
+
     private static float ImpactSpeed(float powerFraction, float distance)
     {
         float atOneUnit = 21.6f * powerFraction;
-        float fallOff = Mathf.Lerp(2.6f, 4f, Mathf.InverseLerp(4f, 5.4f, atOneUnit));
-        float squared = atOneUnit * atOneUnit - fallOff * (distance - 1f);
+        float squared = atOneUnit * atOneUnit - CueBallFallOffPerUnit * (distance - 1f);
         return Mathf.Max(0.4f * atOneUnit, Mathf.Sqrt(Mathf.Max(0f, squared)));
     }
 

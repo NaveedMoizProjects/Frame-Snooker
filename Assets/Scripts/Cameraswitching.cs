@@ -64,6 +64,12 @@ public class CameraSwitching : MonoBehaviour
     public void SwitchToThirdPersonCamera() => Activate(CameraMode.ThirdPerson);
     public void SwitchToFirstPersonCamera() => Activate(CameraMode.FirstPerson);
 
+    // Single button, two cameras: flips between the default top-down view and the third-person one,
+    // leaving first-person out of the cycle entirely. Goes through the same Activate() every other
+    // switch uses, so it can't drift out of sync with the priority-based mode tracking above.
+    public void ToggleTopDownThirdPerson()
+        => Activate(activeMode == CameraMode.TopDown ? CameraMode.ThirdPerson : CameraMode.TopDown);
+
     // Single shared implementation instead of two near-identical overloads.
     private void Activate(CameraMode mode)
     {

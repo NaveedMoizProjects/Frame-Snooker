@@ -19,10 +19,10 @@ MonoBehaviour:
   aimErrorDegreesPerBallPotted: 0.003
   powerErrorPercent: 4
   powerErrorFloorFraction: 0.2
-  minAcceptablePotScore: 0.25
+  minAcceptablePotScore: 0.15
   makeabilityErrorFraction: 0.3
-  safetyProbability: {x: 0.4, y: 0.55}
-  safetyRollPotScore: 0.4
+  safetyProbability: {x: 0.05, y: 0.15}
+  safetyRollPotScore: 0.25
   positionWeight: 0.6
   deliberateSpinUsage: 2
   candidateSurveyCount: 0

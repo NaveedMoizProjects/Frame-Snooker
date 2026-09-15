@@ -192,6 +192,9 @@ public class GameManager : MonoBehaviour
     public void Cam2() => cameraSwitching?.SwitchToThirdPersonCamera();
     public void Cam3() => cameraSwitching?.SwitchToFirstPersonCamera();
 
+    // Wired to the single camera-toggle button: alternates top-down/third-person on every click.
+    public void ToggleCamera() => cameraSwitching?.ToggleTopDownThirdPerson();
+
     public bool isNextPlay() => nextplay;
 
     // Lets other systems (like BallRollingFriction) read the same balls list
