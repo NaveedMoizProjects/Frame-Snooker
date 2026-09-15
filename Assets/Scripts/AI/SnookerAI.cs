@@ -24,6 +24,12 @@ public class SnookerAI : MonoBehaviour
     [Header("Feel")]
     [Tooltip("Pause before shooting, purely so the AI doesn't feel instant. Not a functional delay.")]
     [SerializeField] private Vector2 thinkingDelaySeconds = new Vector2(0.5f, 1.5f);
+    [Tooltip("How long the cue visually rotates from its current angle to the new aim instead of " +
+             "snapping instantly - gives the aim-following chase camera something to pan along with.")]
+    [SerializeField] private float aimAnimationSeconds = 0.5f;
+    [Tooltip("How long the AI holds still on the final, fully-lined-up aim before striking - a beat " +
+             "for the player to actually see the shot before it happens.")]
+    [SerializeField] private float aimSettleSeconds = 0.35f;
 
     [Header("Power mapping")]
     [Tooltip("Power fraction for a safety or escape with no distance to cover at all. Pots are paced " +
@@ -1341,9 +1347,9 @@ public class SnookerAI : MonoBehaviour
         // Aim by putting the stick where a human's drag would have put it. Cue.cs then derives its
         // strike direction from the stick's position exactly as it does for a human shot - the error
         // above is already baked into this angle, so there is no truer aim anywhere in the pipeline.
-        cueVisual.SetAzimuth(AzimuthFor(plan.aimDir));
-        yield return null;
-        yield return null;
+        // Animated (not snapped) so both the stick and the aim-following chase camera visibly settle
+        // into the shot instead of jump-cutting straight to it.
+        yield return AnimateAimTo(AzimuthFor(plan.aimDir));
 
         if (debugLogging)
         {
@@ -1391,6 +1397,28 @@ public class SnookerAI : MonoBehaviour
                               $"{gameManager.IsConfirmMode}, strikeRequested={gameManager.IsStrikeRequested}) - " +
                               "will retry next loop instead of waiting for a shot that was never taken.");
         }
+    }
+
+    // Rotates the cue visual from wherever it currently sits to targetAzimuth over aimAnimationSeconds
+    // (LerpAngle takes the short way round, same as a human's drag would), then holds there for
+    // aimSettleSeconds. Snapping straight to the final angle - the old behaviour - meant the aim
+    // (and anything watching it, like CueChaseCamera) jumped instead of panned, which is what made
+    // AI turns look like a jump-cut instead of a played shot.
+    private IEnumerator AnimateAimTo(float targetAzimuth)
+    {
+        float startAzimuth = cueVisual.CurrentAzimuth;
+        float duration = Mathf.Max(0.01f, aimAnimationSeconds);
+        float t = 0f;
+        while (t < duration)
+        {
+            t += Time.deltaTime;
+            cueVisual.SetAzimuth(Mathf.LerpAngle(startAzimuth, targetAzimuth, Mathf.Clamp01(t / duration)));
+            yield return null;
+        }
+        cueVisual.SetAzimuth(targetAzimuth);
+
+        if (aimSettleSeconds > 0f)
+            yield return new WaitForSeconds(aimSettleSeconds);
     }
 
     // Where the object ball WOULD go on a perfect ghost-ball contact, given the aim actually played

@@ -73,7 +73,11 @@ public class CueVisualController : MonoBehaviour
         bool placing = GameManager.Instance != null && GameManager.Instance.IsAwaitingPlacement;
         SetStickVisible(!placing);
 
-        if (respectInputLock && GameManager.Instance != null && GameManager.Instance.IsInputLocked)
+        // Uses the narrower IsAimFrozen (not IsInputLocked) so a pending foul decision doesn't freeze
+        // the stick/camera along with it - the player still needs to look around the table to judge
+        // the position before choosing Play or Play Again. Actually confirming or striking a shot is
+        // blocked separately and unconditionally by GameManager itself during that decision.
+        if (respectInputLock && GameManager.Instance != null && GameManager.Instance.IsAimFrozen)
             return;
 
         HandleInput();
@@ -82,6 +86,12 @@ public class CueVisualController : MonoBehaviour
 
     private void HandleInput()
     {
+        // The AI drives angleY itself (via SetAzimuth) while it's animating its own aim - a human
+        // dragging the mouse during that window would otherwise fight it, since confirmMode/
+        // inputLocked don't engage until AFTER the AI's aim settles (same as a real player still
+        // has free aim right up to pressing Confirm).
+        if (GameManager.Instance != null && GameManager.Instance.IsAiTurn) return;
+
         // Mouse drag
         if (enableMouseControl)
         {
@@ -165,6 +175,10 @@ public class CueVisualController : MonoBehaviour
     {
         angleY = degrees;
     }
+
+    // Lets SnookerAI read where the stick currently is so it can animate from there to its target
+    // angle instead of snapping - see SnookerAI.AnimateAimTo.
+    public float CurrentAzimuth => angleY;
 
     // Optional helper: change horizontal distance (e.g. live tuning)
     public void SetHorizontalDistance(float distance)

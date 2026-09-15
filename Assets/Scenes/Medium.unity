@@ -20,11 +20,11 @@ RenderSettings:
   m_FogDensity: 0.01
   m_LinearFogStart: 0
   m_LinearFogEnd: 300
-  m_AmbientSkyColor: {r: 0.212, g: 0.227, b: 0.259, a: 1}
-  m_AmbientEquatorColor: {r: 0.114, g: 0.125, b: 0.133, a: 1}
-  m_AmbientGroundColor: {r: 0.047, g: 0.043, b: 0.035, a: 1}
+  m_AmbientSkyColor: {r: 0.48, g: 0.48, b: 0.52, a: 1}
+  m_AmbientEquatorColor: {r: 0.28, g: 0.28, b: 0.3, a: 1}
+  m_AmbientGroundColor: {r: 0.1, g: 0.09, b: 0.09, a: 1}
   m_AmbientIntensity: 1
-  m_AmbientMode: 0
+  m_AmbientMode: 1
   m_SubtractiveShadowColor: {r: 0.42, g: 0.478, b: 0.627, a: 1}
   m_SkyboxMaterial: {fileID: 10304, guid: 0000000000000000f000000000000000, type: 0}
   m_HaloStrength: 0.5
@@ -302,7 +302,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 13410091}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: FoulDecisionPanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1069,7 +1069,7 @@ GameObject:
   - component: {fileID: 103472938}
   - component: {fileID: 103472940}
   - component: {fileID: 103472939}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: SpinBall
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1426,6 +1426,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  pottedSound: {fileID: 8300000, guid: 744b4f718537aad46939da0bd4a7c71e, type: 3}
+  pitchRange: {x: 0.95, y: 1.05}
+  audioSource: {fileID: 0}
+  potEffectPrefabs:
+  - {fileID: 4823518202205099639, guid: cdc919a43bba95b4a8b6916b6aa5321d, type: 3}
+  - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
+  - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
+  - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
+  effectFallbackLifetime: 2
 --- !u!1 &199915550
 GameObject:
   m_ObjectHideFlags: 0
@@ -1470,7 +1479,7 @@ GameObject:
   - component: {fileID: 228911545}
   - component: {fileID: 228911544}
   - component: {fileID: 228911543}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: SpinMini
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1698,7 +1707,7 @@ GameObject:
   - component: {fileID: 305201569}
   - component: {fileID: 305201568}
   - component: {fileID: 305201567}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: SpinClose
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2136,7 +2145,7 @@ GameObject:
   - component: {fileID: 385285277}
   - component: {fileID: 385285279}
   - component: {fileID: 385285278}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Core
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2318,6 +2327,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  pottedSound: {fileID: 8300000, guid: 744b4f718537aad46939da0bd4a7c71e, type: 3}
+  pitchRange: {x: 0.95, y: 1.05}
+  audioSource: {fileID: 0}
+  potEffectPrefabs:
+  - {fileID: 4823518202205099639, guid: cdc919a43bba95b4a8b6916b6aa5321d, type: 3}
+  - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
+  - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
+  - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
+  effectFallbackLifetime: 2
 --- !u!1 &414624474
 GameObject:
   m_ObjectHideFlags: 0
@@ -3042,6 +3060,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  pottedSound: {fileID: 8300000, guid: 744b4f718537aad46939da0bd4a7c71e, type: 3}
+  pitchRange: {x: 0.95, y: 1.05}
+  audioSource: {fileID: 0}
+  potEffectPrefabs:
+  - {fileID: 4823518202205099639, guid: cdc919a43bba95b4a8b6916b6aa5321d, type: 3}
+  - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
+  - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
+  - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
+  effectFallbackLifetime: 2
 --- !u!1 &666870322
 GameObject:
   m_ObjectHideFlags: 0
@@ -3313,7 +3340,7 @@ Light:
   m_Type: 1
   m_Shape: 0
   m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
-  m_Intensity: 1
+  m_Intensity: 1.3
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -3471,6 +3498,9 @@ MonoBehaviour:
   Drag: 0
   AngularDrag: 0.05
   forceMultiplier: 0.15
+  cueHitSound: {fileID: 8300000, guid: 981abfbb1c03902419ddd8088c0b1440, type: 3}
+  pitchRange: {x: 0.95, y: 1.05}
+  audioSource: {fileID: 0}
   spinContactOffset: 0.7
   cueElevationDegrees: 10
   aimLineCue: {fileID: 322264290}
@@ -3685,8 +3715,6 @@ GameObject:
   m_Component:
   - component: {fileID: 773191583}
   - component: {fileID: 773191586}
-  - component: {fileID: 773191589}
-  - component: {fileID: 773191590}
   m_Layer: 0
   m_Name: cm
   m_TagString: Untagged
@@ -3721,55 +3749,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ac0b09e7857660247b1477e93731de29, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &773191589
-MonoBehaviour:
-  m_ObjectHideFlags: 3
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 773191582}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fa7155796051b734daa718462081dc5f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_BindingMode: 1
-  m_FollowOffset: {x: 0, y: 12, z: 11}
-  m_XDamping: 1
-  m_YDamping: 1
-  m_ZDamping: 1
-  m_AngularDampingMode: 0
-  m_PitchDamping: 0
-  m_YawDamping: 0
-  m_RollDamping: 0
-  m_AngularDamping: 0
---- !u!114 &773191590
-MonoBehaviour:
-  m_ObjectHideFlags: 3
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 773191582}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f4044717213e31446939f7bd49c896ea, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  m_TrackedObjectOffset: {x: 0, y: 0, z: 0}
-  m_LookaheadTime: 0
-  m_LookaheadSmoothing: 0
-  m_LookaheadIgnoreY: 0
-  m_HorizontalDamping: 0.5
-  m_VerticalDamping: 0.5
-  m_ScreenX: 0.5
-  m_ScreenY: 0.5
-  m_DeadZoneWidth: 0
-  m_DeadZoneHeight: 0
-  m_SoftZoneWidth: 0.8
-  m_SoftZoneHeight: 0.8
-  m_BiasX: 0
-  m_BiasY: 0
-  m_CenterOnActivate: 1
 --- !u!1 &775282244
 GameObject:
   m_ObjectHideFlags: 3
@@ -3877,7 +3856,7 @@ GameObject:
   - component: {fileID: 785771001}
   - component: {fileID: 785771000}
   - component: {fileID: 785770999}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: PlacementConfirm
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4175,7 +4154,7 @@ GameObject:
   - component: {fileID: 864164206}
   - component: {fileID: 864164208}
   - component: {fileID: 864164207}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Tick
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4477,7 +4456,7 @@ Camera:
   m_Enabled: 1
   serializedVersion: 2
   m_ClearFlags: 2
-  m_BackGroundColor: {r: 0, g: 0, b: 0, a: 1}
+  m_BackGroundColor: {r: 0.02, g: 0.02, b: 0.025, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -4506,7 +4485,7 @@ Camera:
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 4294966783
   m_RenderingPath: -1
   m_TargetTexture: {fileID: 0}
   m_TargetDisplay: 0
@@ -4620,7 +4599,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1016086790}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: PlacementPanel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5854,6 +5833,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  pottedSound: {fileID: 8300000, guid: 744b4f718537aad46939da0bd4a7c71e, type: 3}
+  pitchRange: {x: 0.95, y: 1.05}
+  audioSource: {fileID: 0}
+  potEffectPrefabs:
+  - {fileID: 4823518202205099639, guid: cdc919a43bba95b4a8b6916b6aa5321d, type: 3}
+  - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
+  - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
+  - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
+  effectFallbackLifetime: 2
 --- !u!54 &1312709907
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -6014,6 +6002,55 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1331425080}
   m_CullTransparentMesh: 1
+--- !u!1 &1346652012
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1346652014}
+  - component: {fileID: 1346652013}
+  m_Layer: 0
+  m_Name: Global Volume
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1346652013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1346652012}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 172515602e62fb746b5d573b38a5fe58, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_IsGlobal: 1
+  priority: 0
+  blendDistance: 0
+  weight: 1
+  sharedProfile: {fileID: 11400000, guid: 8002d4df923d41c40b5d91374c4a0805, type: 2}
+--- !u!4 &1346652014
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1346652012}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1389892839
 GameObject:
   m_ObjectHideFlags: 0
@@ -6293,7 +6330,7 @@ GameObject:
   - component: {fileID: 1417748189}
   - component: {fileID: 1417748191}
   - component: {fileID: 1417748190}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Core
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6610,6 +6647,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  pottedSound: {fileID: 8300000, guid: 744b4f718537aad46939da0bd4a7c71e, type: 3}
+  pitchRange: {x: 0.95, y: 1.05}
+  audioSource: {fileID: 0}
+  potEffectPrefabs:
+  - {fileID: 4823518202205099639, guid: cdc919a43bba95b4a8b6916b6aa5321d, type: 3}
+  - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
+  - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
+  - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
+  effectFallbackLifetime: 2
 --- !u!1 &1510037198
 GameObject:
   m_ObjectHideFlags: 0
@@ -6619,7 +6665,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1510037199}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: SpinWidget
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6757,6 +6803,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1549604206}
   - component: {fileID: 1549604207}
+  - component: {fileID: 1549604208}
   m_Layer: 0
   m_Name: CM_ThirdPersonCam
   m_TagString: Untagged
@@ -6772,8 +6819,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1549604205}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.3185184, y: 0.000000041434756, z: -0.000000013922883, w: 0.9479167}
-  m_LocalPosition: {x: 0.75399995, y: 4.801, z: 7.6280003}
+  m_LocalRotation: {x: -0.00671147, y: 0.961989, z: -0.2719718, w: -0.023739083}
+  m_LocalPosition: {x: 0.92729646, y: 6.0054483, z: 8.682147}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -6819,6 +6866,26 @@ MonoBehaviour:
         m_Calls: []
   m_LegacyBlendHint: 0
   m_ComponentOwner: {fileID: 773191583}
+--- !u!114 &1549604208
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1549604205}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f5a72215e84d0c4b8ee4d07584d6184, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cue: {fileID: 740111991}
+  followBall: 1
+  backDistance: 4
+  height: 3.2
+  lookAheadDistance: 5
+  extraPitchDegrees: 12
+  smoothTime: 0.06
+  maxRotationDegreesPerSecond: 240
 --- !u!1 &1556788967
 GameObject:
   m_ObjectHideFlags: 0
@@ -7325,6 +7392,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 629b3857720fb454f9459d5f860adad7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  pottedSound: {fileID: 8300000, guid: 744b4f718537aad46939da0bd4a7c71e, type: 3}
+  pitchRange: {x: 0.95, y: 1.05}
+  audioSource: {fileID: 0}
+  potEffectPrefabs:
+  - {fileID: 4823518202205099639, guid: cdc919a43bba95b4a8b6916b6aa5321d, type: 3}
+  - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
+  - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
+  - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
+  effectFallbackLifetime: 2
 --- !u!1 &1667047314
 GameObject:
   m_ObjectHideFlags: 0
@@ -8852,7 +8928,7 @@ GameObject:
   - component: {fileID: 1743733522}
   - component: {fileID: 1743733521}
   - component: {fileID: 1743733520}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: SelectedColourIndicator
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -8942,7 +9018,7 @@ GameObject:
   - component: {fileID: 1746660090}
   - component: {fileID: 1746660092}
   - component: {fileID: 1746660091}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: FoulDecisionPrompt
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9074,7 +9150,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1752837360}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: CanvasGameObject
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9151,7 +9227,7 @@ GameObject:
   - component: {fileID: 1842144970}
   - component: {fileID: 1842144972}
   - component: {fileID: 1842144971}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: SpinDot
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -9658,6 +9734,8 @@ MonoBehaviour:
   profile: {fileID: 11400000, guid: e3e75dc3dc4a48042b3c203070de8296, type: 2}
   aiPlayerIndex: 1
   thinkingDelaySeconds: {x: 0.5, y: 1.5}
+  aimAnimationSeconds: 0.5
+  aimSettleSeconds: 0.35
   basePowerFraction: 0.85
   powerPerTableDiagonal: 0.35
   safetyPowerMultiplier: 0.8
@@ -9959,7 +10037,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1957099635}
   - component: {fileID: 1957099636}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: SpinSelector
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10094,7 +10172,7 @@ GameObject:
   - component: {fileID: 1991464351}
   - component: {fileID: 1991464353}
   - component: {fileID: 1991464352}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: MiniDot
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10305,7 +10383,7 @@ GameObject:
   - component: {fileID: 2003512401}
   - component: {fileID: 2003512403}
   - component: {fileID: 2003512402}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Mid
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10610,7 +10688,7 @@ GameObject:
   - component: {fileID: 2117234120}
   - component: {fileID: 2117234122}
   - component: {fileID: 2117234121}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: PlacementPrompt
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10744,7 +10822,7 @@ GameObject:
   - component: {fileID: 2118302177}
   - component: {fileID: 2118302179}
   - component: {fileID: 2118302178}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: SpinLabel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -10878,7 +10956,7 @@ GameObject:
   - component: {fileID: 2119611010}
   - component: {fileID: 2119611012}
   - component: {fileID: 2119611011}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Tick
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -11032,6 +11110,14 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 4222468503596617996, guid: 43c4b7613052fb542ac2c1c012df5a39, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 4222468503596617996, guid: 43c4b7613052fb542ac2c1c012df5a39, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 8264945523367870077, guid: 43c4b7613052fb542ac2c1c012df5a39, type: 3}
       propertyPath: m_Name
       value: Green.001
@@ -11167,6 +11253,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: Redball#9
       objectReference: {fileID: 0}
+    - target: {fileID: 4283100180337794946, guid: 0c13c7c6e33164547a0623dad80cdcfb, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 4283100180337794946, guid: 0c13c7c6e33164547a0623dad80cdcfb, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 5561022487573262080, guid: 0c13c7c6e33164547a0623dad80cdcfb, type: 3}
       propertyPath: m_LocalPosition.x
       value: -0.07088541
@@ -11302,6 +11396,14 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 2586547634850091627, guid: e9554710ffb8a8f4592d07442401fbcc, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 2586547634850091627, guid: e9554710ffb8a8f4592d07442401fbcc, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 2606612313197224348, guid: e9554710ffb8a8f4592d07442401fbcc, type: 3}
       propertyPath: m_Name
       value: Blue.001
@@ -11482,6 +11584,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: Yellow.001
       objectReference: {fileID: 0}
+    - target: {fileID: 8845784166055917045, guid: 3106292767d428e44b6af5d9e715de75, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 8845784166055917045, guid: 3106292767d428e44b6af5d9e715de75, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -11717,6 +11827,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 5095875692355806915, guid: ed2539a02620e4548aca2a37bb4e1330, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 5095875692355806915, guid: ed2539a02620e4548aca2a37bb4e1330, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -12326,6 +12444,14 @@ PrefabInstance:
       propertyPath: m_Material
       value: 
       objectReference: {fileID: 1813547531}
+    - target: {fileID: 6506993919865552912, guid: 39cf5d699b94ea0488bd2b47fb2c7533, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 6506993919865552912, guid: 39cf5d699b94ea0488bd2b47fb2c7533, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 7528802340063458042, guid: 39cf5d699b94ea0488bd2b47fb2c7533, type: 3}
       propertyPath: m_Name
       value: Cueball
@@ -12385,6 +12511,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 313626901}
     m_Modifications:
+    - target: {fileID: 2946002045403248432, guid: 82d51c13383fc91449e5d0b9d45f988c, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 2946002045403248432, guid: 82d51c13383fc91449e5d0b9d45f988c, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 3058289828315286427, guid: 82d51c13383fc91449e5d0b9d45f988c, type: 3}
       propertyPath: m_LocalPosition.x
       value: -0.04062316
@@ -12486,6 +12620,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: Redball#7
       objectReference: {fileID: 0}
+    - target: {fileID: 8764890935556078525, guid: 6ea456593a480e84bbb03e310a4e51b3, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 8764890935556078525, guid: 6ea456593a480e84bbb03e310a4e51b3, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -12626,6 +12768,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1243962939948510582, guid: 6c36c8a3c46c5034f850275257b36bc4, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 1243962939948510582, guid: 6c36c8a3c46c5034f850275257b36bc4, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 5175417692115302418, guid: 6c36c8a3c46c5034f850275257b36bc4, type: 3}
       propertyPath: m_Name
       value: Redball#15
@@ -12754,6 +12904,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 313626901}
     m_Modifications:
+    - target: {fileID: 1016516091935743956, guid: 5da332da0a8ad7344a716d66ba293555, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 1016516091935743956, guid: 5da332da0a8ad7344a716d66ba293555, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 4561775924999866445, guid: 5da332da0a8ad7344a716d66ba293555, type: 3}
       propertyPath: m_LocalPosition.x
       value: -0.050765947
@@ -13110,6 +13268,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 313626901}
     m_Modifications:
+    - target: {fileID: 4855583802772069692, guid: ae806feb70d850b4a83333bf0f0e970e, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 4855583802772069692, guid: ae806feb70d850b4a83333bf0f0e970e, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 6027632304083590715, guid: ae806feb70d850b4a83333bf0f0e970e, type: 3}
       propertyPath: m_Name
       value: Redball#13
@@ -13431,6 +13597,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: Redball#10
       objectReference: {fileID: 0}
+    - target: {fileID: 8172987241616221814, guid: a5342b1c6c608fd4898c73bf03f92a66, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 8172987241616221814, guid: a5342b1c6c608fd4898c73bf03f92a66, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -13719,6 +13893,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7964250033920641467, guid: aa007701bc86064448007aa5100f7d02, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 7964250033920641467, guid: aa007701bc86064448007aa5100f7d02, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -14146,6 +14328,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: TransparentBall
       objectReference: {fileID: 0}
+    - target: {fileID: 4859117898261897200, guid: c4edfd66c77bdcd4c9542a82dfb192c4, type: 3}
+      propertyPath: m_Layer
+      value: 9
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -14215,6 +14401,14 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 3638438181717919989, guid: ed245de2066a3244390b25e201489aca, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 3638438181717919989, guid: ed245de2066a3244390b25e201489aca, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 9069811944708780920, guid: ed245de2066a3244390b25e201489aca, type: 3}
       propertyPath: m_Name
       value: Pink
@@ -14256,6 +14450,14 @@ PrefabInstance:
       propertyPath: m_Name
       value: Redball#8
       objectReference: {fileID: 0}
+    - target: {fileID: 6402421767176660270, guid: 510d2b05533715046b4df566cf788bc1, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 6402421767176660270, guid: 510d2b05533715046b4df566cf788bc1, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 7267776896636131613, guid: 510d2b05533715046b4df566cf788bc1, type: 3}
       propertyPath: m_LocalPosition.x
       value: -0.05073549
@@ -14485,6 +14687,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 313626901}
     m_Modifications:
+    - target: {fileID: 654036314253258565, guid: be5bcce495b434741820d177c21f9ac8, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 654036314253258565, guid: be5bcce495b434741820d177c21f9ac8, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 3447415506361156884, guid: be5bcce495b434741820d177c21f9ac8, type: 3}
       propertyPath: m_LocalPosition.x
       value: -0.010351995
@@ -14685,6 +14895,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 313626901}
     m_Modifications:
+    - target: {fileID: 2523058264671871007, guid: 4abd88eb3f3cb39499c7181b21afa0a5, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 2523058264671871007, guid: 4abd88eb3f3cb39499c7181b21afa0a5, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 4871539205084132677, guid: 4abd88eb3f3cb39499c7181b21afa0a5, type: 3}
       propertyPath: m_Name
       value: Redball#12
@@ -14786,6 +15004,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 6124298641269233098, guid: 96e440d7e2945324480eee5541623918, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 6124298641269233098, guid: 96e440d7e2945324480eee5541623918, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -15005,6 +15231,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 313626901}
     m_Modifications:
+    - target: {fileID: 715303410318394278, guid: cfdda6ac97a66da4990d7d8d27667258, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 715303410318394278, guid: cfdda6ac97a66da4990d7d8d27667258, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 6116713927126756033, guid: cfdda6ac97a66da4990d7d8d27667258, type: 3}
       propertyPath: m_LocalPosition.x
       value: -0.08107112
@@ -15139,6 +15373,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 543450652906160203}
     m_Modifications:
+    - target: {fileID: 5423979110370936813, guid: 580ef6778b4f8c64b974e6f05dc56a49, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 5423979110370936813, guid: 580ef6778b4f8c64b974e6f05dc56a49, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 7752346009018029958, guid: 580ef6778b4f8c64b974e6f05dc56a49, type: 3}
       propertyPath: m_Name
       value: Black
@@ -15220,6 +15462,14 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 313626901}
     m_Modifications:
+    - target: {fileID: 1268671966246882661, guid: 7c1ee04601235b14983018b1feb0dd23, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 1268671966246882661, guid: 7c1ee04601235b14983018b1feb0dd23, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 4745754060426106778, guid: 7c1ee04601235b14983018b1feb0dd23, type: 3}
       propertyPath: m_Name
       value: Redball#3
@@ -15684,6 +15934,14 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 221632171522193588, guid: b63972256fd9a344aa9d2b0d6da11d4f, type: 3}
+      propertyPath: ballHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: e3666d4f01e801241ad3b8e8a9cca1a2, type: 3}
+    - target: {fileID: 221632171522193588, guid: b63972256fd9a344aa9d2b0d6da11d4f, type: 3}
+      propertyPath: slowBallHitSound
+      value: 
+      objectReference: {fileID: 8300000, guid: 62731e0028766c4479c2514aeb652e33, type: 3}
     - target: {fileID: 6192784576878776445, guid: b63972256fd9a344aa9d2b0d6da11d4f, type: 3}
       propertyPath: m_Name
       value: Brown
@@ -15748,3 +16006,4 @@ SceneRoots:
   - {fileID: 1018029818}
   - {fileID: 895080118}
   - {fileID: 1931566286}
+  - {fileID: 1346652014}

@@ -25,6 +25,15 @@ public class Cue : MonoBehaviour
     [Range(0.01f, 15f)]
     [SerializeField] private float forceMultiplier = 1.0f; // scales the final force (live)
 
+    // ---------------- Sound ----------------
+    [Header("Sound")]
+    [Tooltip("Played the moment the cue strikes the cue ball. Optional.")]
+    [SerializeField] private AudioClip cueHitSound;
+    [Tooltip("Random pitch range applied each strike, so repeated hits don't sound identical.")]
+    [SerializeField] private Vector2 pitchRange = new Vector2(0.95f, 1.05f);
+    [Tooltip("Optional: assign an AudioSource to route through (e.g. a mixer group). If left empty, one is added automatically on this GameObject.")]
+    [SerializeField] private AudioSource audioSource;
+
     // ---------------- Spin (SPIN_LOGIC.md) ----------------
     [Header("Spin")]
     [Tooltip("How far off-centre the tip meets the ball at full dot deflection, as a fraction of the ball radius.")]
@@ -417,9 +426,16 @@ public class Cue : MonoBehaviour
 
         Vector2 spin = gameManager.StrikeSpin;
         float maxOffset = cueBallRadius * spinContactOffset;
-        Vector3 contactPoint = cueballRigidbody.worldCenterOfMass - strikeDirection * cueBallRadius
-                             + right * (spin.x * maxOffset)
-                             + Vector3.up * (spin.y * maxOffset);
+        Vector3 lateralOffset = right * (spin.x * maxOffset) + Vector3.up * (spin.y * maxOffset);
+
+        // The tip can only ever touch a point ON the ball's surface - pulling the backward depth
+        // in as the lateral offset grows (instead of always going a full radius back) keeps
+        // contactPoint on the sphere at any spin setting. Summing a fixed radius-back offset with
+        // the lateral one directly (the old code) put the point up to ~16% outside the ball at max
+        // spin, inflating the torque (r x F) far beyond what a real cue tip could ever impart.
+        float depthSq = cueBallRadius * cueBallRadius - lateralOffset.sqrMagnitude;
+        float depth = depthSq > 0f ? Mathf.Sqrt(depthSq) : 0f;
+        Vector3 contactPoint = cueballRigidbody.worldCenterOfMass - strikeDirection * depth + lateralOffset;
 
         float impulse = gameManager.GetStrikeForce() * forceMultiplier;
 
@@ -432,11 +448,34 @@ public class Cue : MonoBehaviour
 
         cueballRigidbody.WakeUp();
         cueballRigidbody.AddForceAtPosition(strikeDirection * impulse, contactPoint, ForceMode.Impulse);
+        PlaySound(cueHitSound);
 
         Debug.Log($"[Cue Strike] Impulse={impulse:F2} | Spin={spin} | Elevation={cueElevationDegrees}deg | Aim={aimForward} | mass={cueballRigidbody.mass}", this);
 
         // clear requests/confirm after applying
         gameManager.ClearStrikeRequest();
         // gameManager.ClearConfirmMode();
+    }
+
+    private void PlaySound(AudioClip clip)
+    {
+        if (clip == null) return;
+        var src = GetAudioSource();
+        src.pitch = Random.Range(pitchRange.x, pitchRange.y);
+        src.PlayOneShot(clip);
+    }
+
+    // Lazily resolves/creates the AudioSource instead of the static PlayClipAtPoint helper, since
+    // PlayClipAtPoint spawns a temporary GameObject with no way to set pitch - and pitch variation
+    // is what keeps repeated strikes from sounding robotic.
+    private AudioSource GetAudioSource()
+    {
+        if (audioSource == null)
+        {
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
+            audioSource.playOnAwake = false;
+        }
+        return audioSource;
     }
 }

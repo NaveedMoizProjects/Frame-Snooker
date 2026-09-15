@@ -97,6 +97,9 @@ public class GameManager : MonoBehaviour
     // while reds remain. Without this the state flipped anyway, and since only a legal colour pot
     // flips it back, the frame got stuck on Colour with reds still on the table.
     private bool lastShotWasFoul = false;
+    // Exposed so pot celebration effects (PocketTrigger) can hold off spawning until the whole shot
+    // resolves and this is known - a ball dropping mid-shot doesn't yet know if the shot is a foul.
+    public bool LastShotWasFoul => lastShotWasFoul;
 
     // Spin: the live dot position from the spin widget, and the value locked in for the shot being
     // played. RequestStrike copies one into the other before resetting the live value, so spin never
@@ -316,7 +319,14 @@ public class GameManager : MonoBehaviour
     public bool IsConfirmMode => confirmMode;
     public bool IsStrikeRequested => strikeRequested;
     // Placement replaces normal aiming input entirely, so it locks the cue the same way confirm does.
+    // Blocks Confirm/Strike/spin/ball-click-targeting - anything that could commit to or start a shot.
     public bool IsInputLocked => inputLocked || awaitingPlacement || awaitingFoulDecision;
+    // Narrower than IsInputLocked: only the cases where the cue itself should stop moving entirely
+    // (post-Confirm, and ball-in-hand). A pending foul decision does NOT belong here - the player
+    // still needs to freely look around the table (via the aim-follow camera) to judge the position
+    // before choosing Play or Play Again; only actually taking a shot is blocked during that choice,
+    // which ConfirmButtonPressed/RequestStrike already refuse on their own regardless of this.
+    public bool IsAimFrozen => inputLocked || awaitingPlacement;
 
     // Called by the single on-screen button.
     // First press enters Confirm mode (locks input). Second press requests the strike.

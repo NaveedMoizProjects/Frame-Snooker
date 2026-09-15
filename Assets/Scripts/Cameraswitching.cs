@@ -31,8 +31,9 @@ public class CameraSwitching : MonoBehaviour
 
     private void Start()
     {
-        // Activates the Top Down camera by default
-        SwitchToTopDownCamera();
+        // Low behind-the-cue view is now the default aiming camera (2026-09-16, on request) -
+        // top-down is still one Cam-button toggle away via ToggleTopDownThirdPerson().
+        SwitchToThirdPersonCamera();
     }
 
     private void Update()
