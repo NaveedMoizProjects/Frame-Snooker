@@ -36,6 +36,12 @@ public class BallAimClickTarget : MonoBehaviour
         if (cueBall == null) return;
 
         AimUtility.PointAt(cueVisual, cueBall.transform.position, transform.position);
+
+        // FREE_BALL.md: while a free ball is available, clicking any ball both aims at it AND
+        // nominates it as this shot's ball-on - the existing ball-on selection pattern (aim = pick),
+        // just no longer restricted to the normal legal set (GameManager.NominateFreeBall enforces
+        // that; this just calls it opportunistically and lets it no-op if it isn't actually relevant).
+        if (gm.IsFreeBallAvailable) gm.NominateFreeBall(identity.Type);
     }
 
     private static Rigidbody FindCueBall(GameManager gm)

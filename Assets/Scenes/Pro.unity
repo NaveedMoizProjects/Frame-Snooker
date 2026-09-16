@@ -1262,7 +1262,8 @@ MonoBehaviour:
   - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
   - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
   - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
-  effectFallbackLifetime: 2
+  effectSpawnHeightOffset: 0.1
+  effectLifetime: 1
 --- !u!1 &199915550
 GameObject:
   m_ObjectHideFlags: 0
@@ -2370,7 +2371,8 @@ MonoBehaviour:
   - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
   - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
   - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
-  effectFallbackLifetime: 2
+  effectSpawnHeightOffset: 0.1
+  effectLifetime: 1
 --- !u!1 &414624474
 GameObject:
   m_ObjectHideFlags: 0
@@ -3226,7 +3228,8 @@ MonoBehaviour:
   - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
   - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
   - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
-  effectFallbackLifetime: 2
+  effectSpawnHeightOffset: 0.1
+  effectLifetime: 1
 --- !u!1 &666870322
 GameObject:
   m_ObjectHideFlags: 0
@@ -4950,7 +4953,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -6832,7 +6835,8 @@ MonoBehaviour:
   - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
   - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
   - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
-  effectFallbackLifetime: 2
+  effectSpawnHeightOffset: 0.1
+  effectLifetime: 1
 --- !u!54 &1312709907
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -7597,7 +7601,8 @@ MonoBehaviour:
   - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
   - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
   - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
-  effectFallbackLifetime: 2
+  effectSpawnHeightOffset: 0.1
+  effectLifetime: 1
 --- !u!1 &1510037198
 GameObject:
   m_ObjectHideFlags: 0
@@ -7826,6 +7831,7 @@ MonoBehaviour:
   - {fileID: 7746203734043623106}
   cueBall: {fileID: 7746203734043623106}
   cueBallRespawnPoint: {fileID: 706661223}
+  cue: {fileID: 0}
   baseStrikeForce: 30
   moveThreshold: 0.01
   snapToZeroThreshold: 0.09
@@ -8595,7 +8601,8 @@ MonoBehaviour:
   - {fileID: 7823327091382468809, guid: af0d06ad2f476cc43be23ac0f464a510, type: 3}
   - {fileID: 6331275906715107345, guid: 690951f4781b19649bc5c7892414ff37, type: 3}
   - {fileID: 8846737274113074935, guid: 81a74a0aefeb7674ca32535d1a269b4a, type: 3}
-  effectFallbackLifetime: 2
+  effectSpawnHeightOffset: 0.1
+  effectLifetime: 1
 --- !u!1 &1667047314
 GameObject:
   m_ObjectHideFlags: 0
@@ -10296,7 +10303,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 07795fae139ee1f4e9c0490196630324, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -15.5
+      value: -14.8
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 07795fae139ee1f4e9c0490196630324, type: 3}
       propertyPath: m_LocalPosition.y
@@ -10304,7 +10311,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 07795fae139ee1f4e9c0490196630324, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -18
+      value: -17.9
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 07795fae139ee1f4e9c0490196630324, type: 3}
       propertyPath: m_LocalRotation.w
@@ -11747,7 +11754,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2

@@ -7,13 +7,13 @@ using UnityEngine;
 [RequireComponent(typeof(Collider))]
 public class PocketTrigger : MonoBehaviour
 {
-    // Shared by all 6 pockets: a shot can pot balls at more than one pocket, and whether the shot
-    // was a foul is only known once every ball on the table has stopped (GameManager.EvaluateFoul,
-    // which runs on OnAllBallsStopped) - well after any individual OnTriggerEnter here. So the
-    // effect for each pot is picked and queued immediately (sound still plays immediately too - a
-    // potted ball audibly drops regardless of legality) but only actually spawned once the shot
-    // resolves clean; a foul just discards the queue.
-    private struct PendingEffect { public GameObject prefab; public Vector3 position; public float fallbackLifetime; }
+    // Shared by all 6 pockets: whether the shot was a foul (by the AI or the player) is only known
+    // once every ball on the table has stopped (GameManager.EvaluateFoul, which runs on
+    // OnAllBallsStopped) - well after any individual OnTriggerEnter here. An earlier version spawned
+    // the effect immediately and destroyed it early if the shot turned out to be a foul, but that still
+    // showed a brief flash before the cut - on request, fouled pots must show NOTHING at all, so each
+    // pot's effect is only ever queued here and is not instantiated until the shot is confirmed clean.
+    private struct PendingEffect { public GameObject prefab; public Vector3 position; public float lifetime; }
     private static readonly List<PendingEffect> pendingEffects = new List<PendingEffect>();
     private static bool subscribedToShotEnd = false;
 
@@ -26,10 +26,12 @@ public class PocketTrigger : MonoBehaviour
     [SerializeField] private AudioSource audioSource;
 
     [Header("Visual Effect")]
-    [Tooltip("Spawned at the ball's position once the shot resolves as a legal pot (e.g. particle burst prefabs) - suppressed entirely if the shot turns out to be a foul. One is picked at random each pot - never the same one twice in a row - so pots don't all look identical. Optional.")]
+    [Tooltip("Spawned at THIS pocket's own position (not the ball's) once the shot resolves as a legal pot - never spawned at all (by AI or player) if the shot turns out to be a foul. One is picked at random each pot - never the same one twice in a row - so pots don't all look identical. Optional.")]
     [SerializeField] private GameObject[] potEffectPrefabs;
-    [Tooltip("Lifetime (seconds) for the spawned effect if it has no ParticleSystem to time itself by. A ParticleSystem's own duration + start lifetime is used instead when present.")]
-    [SerializeField] private float effectFallbackLifetime = 2f;
+    [Tooltip("How far above this pocket's own transform the effect spawns (world units) - just enough that it visibly breaches the table surface instead of spawning inside the pocket jaw/net geometry.")]
+    [SerializeField] private float effectSpawnHeightOffset = 0.1f;
+    [Tooltip("How long the spawned effect stays alive (seconds) before being destroyed, regardless of the prefab's own particle system duration.")]
+    [SerializeField] private float effectLifetime = 1f;
 
     private int lastEffectIndex = -1;
 
@@ -59,10 +61,11 @@ public class PocketTrigger : MonoBehaviour
             foreach (var pending in pendingEffects)
             {
                 if (pending.prefab == null) continue;
+                // World-up, deliberately - NOT the pocket collider's own rotation, which is whatever
+                // its imported mesh happened to carry and isn't guaranteed to mean anything. This is
+                // what makes the effect burst straight upward out of the pocket regardless of that.
                 var fx = Instantiate(pending.prefab, pending.position, Quaternion.identity);
-                var ps = fx.GetComponentInChildren<ParticleSystem>();
-                float lifetime = ps != null ? ps.main.duration + ps.main.startLifetime.constantMax : pending.fallbackLifetime;
-                Destroy(fx, lifetime);
+                Destroy(fx, pending.lifetime);
             }
         }
         pendingEffects.Clear();
@@ -88,11 +91,14 @@ public class PocketTrigger : MonoBehaviour
         GameObject chosenEffect = PickEffectPrefab();
         if (chosenEffect != null)
         {
+            // Anchored to THIS pocket's own transform, not the ball's position - the ball can still be
+            // mid-roll or off-centre when it crosses the trigger. Queued, not spawned yet: whether this
+            // pot is part of a foul isn't known until the whole shot ends (ResolvePendingEffects).
             pendingEffects.Add(new PendingEffect
             {
                 prefab = chosenEffect,
-                position = rb.position,
-                fallbackLifetime = effectFallbackLifetime
+                position = transform.position + Vector3.up * effectSpawnHeightOffset,
+                lifetime = effectLifetime
             });
         }
 
