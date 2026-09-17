@@ -18,7 +18,6 @@ public class Cue : MonoBehaviour
     [Header("Cue Ball Rigidbody Settings")]
     [SerializeField] private float Mass = 1.0f;
     [SerializeField] private float Drag = 0.5f;
-    [SerializeField] private float AngularDrag = 0.5f;
 
     // ---------------- Strike Control (Inspector Testing) ----------------
     [Header("Strike Control (Inspector Testing)")]
@@ -101,7 +100,9 @@ public class Cue : MonoBehaviour
         cueballRigidbody = Cueball.GetComponent<Rigidbody>() ?? Cueball.AddComponent<Rigidbody>();
         cueballRigidbody.mass = Mass;
         cueballRigidbody.drag = Drag;
-        cueballRigidbody.angularDrag = AngularDrag;
+        // angularDrag is deliberately left at the ball prefab's own baked-in value (0.001, same as
+        // every object ball) - this used to be overwritten to 0.05 here, which made the cue ball's
+        // spin decay faster than every other ball's for no gameplay reason found in this file.
 
         if (cueBallRadius <= 0f)
         {

@@ -39,8 +39,6 @@ public class GameManager : MonoBehaviour
     [Header("Ball Rest Thresholds")]
     [Tooltip("Above this speed, a ball counts as 'moving' and blocks the next shot.")]
     [SerializeField] private float moveThreshold = 0.01f;
-    [Tooltip("Below this speed, a moving ball is snapped to a full stop to kill physics jitter.")]
-    [SerializeField] private float snapToZeroThreshold = 0.09f;
 
     [Header("Off-Table Safeguard")]
     [Tooltip("Min X/Z of the play area. Anything outside this is treated as 'the cue ball left the table'. " +
@@ -315,14 +313,12 @@ public class GameManager : MonoBehaviour
                     Debug.Log($"[GMDebug] {ball.gameObject.name} is moving at speed {speed:F4} slip {slip:F4} pos={ball.transform.position}");
             }
 
-            // Also clears vertical-axis side spin left on a resting ball, which produces no slip and
-            // would otherwise carry into the next shot.
-            if (speed < snapToZeroThreshold && slip < snapToZeroThreshold
-                && (ball.velocity != Vector3.zero || ball.angularVelocity != Vector3.zero))
-            {
-                ball.velocity = Vector3.zero;
-                ball.angularVelocity = Vector3.zero;
-            }
+            // Force-zeroing a ball's velocity here (below a separate, coarser "snapToZeroThreshold")
+            // used to fire before BallRollingFriction's own hard-stop (stopSpeedThreshold, much finer
+            // and slip-aware) got a chance to run - cutting the last, most natural part of a real
+            // roll-to-a-stop short. BallRollingFriction already zeroes velocity/angularVelocity itself
+            // once a ball is genuinely at rest, every FixedUpdate, so that's removed here - this loop
+            // only needs to WATCH speed/slip for the anyMoving check above, not force-stop anything.
         }
 
         nextplay = !anyMoving;
