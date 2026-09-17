@@ -377,6 +377,21 @@ public class SnookerAI : MonoBehaviour
     {
         into.Clear();
 
+        // FREE_BALL.md: for this one shot, any ball on the table is a legal candidate - checked first
+        // since it overrides the normal red/colour restriction below entirely. The AI still has to
+        // actually choose one via the normal candidate-generation/scoring pipeline (GenerateCandidates,
+        // ChooseBestCandidate) - this only widens which balls it's allowed to consider.
+        if (gameManager.IsFreeBallAvailable)
+        {
+            foreach (var ball in gameManager.GetBalls())
+            {
+                if (ball == null || !ball.gameObject.activeInHierarchy) continue;
+                var id = ball.GetComponent<BallIdentity>();
+                if (id != null && id.Type != BallType.Cue) into.Add(ball);
+            }
+            return;
+        }
+
         if (gameManager.CurrentTargetState == GameManager.TargetBallState.Red)
         {
             foreach (var ball in gameManager.GetBalls())
@@ -621,7 +636,11 @@ public class SnookerAI : MonoBehaviour
         if (next != null) into.Add(next);
     }
 
-    // How good a shot the given resting spot leaves on the next ball on.
+    // How good a shot the given resting spot leaves on the next ball on. Credits not just the single
+    // best next ball/pocket combo but a runner-up too (at reduced weight) - a leave with a genuine
+    // backup option is worth more than one with only a single knife-edge out, since the same
+    // prediction error this whole function exists to hedge against (see LeaveQuality) can just as
+    // easily make the "best" option not actually there once the cue ball really stops.
     private float NextShotQuality(Vector3 restPos, Rigidbody potted)
     {
         CollectNextTargets(potted, nextTargetBuffer);
@@ -634,6 +653,7 @@ public class SnookerAI : MonoBehaviour
         // Six covers every colour after a red - the nearest three were often all unpottable.
         int consider = Mathf.Min(6, nextTargetBuffer.Count);
         float best = 0f;
+        float secondBest = 0f;
 
         for (int i = 0; i < consider; i++)
         {
@@ -656,7 +676,9 @@ public class SnookerAI : MonoBehaviour
                 float d2 = Flat3(pocket - objPos).magnitude;
                 float score = PotScore(cut, d1 + d2);
                 // Cheapest rejections first - this runs for every spin, pace and sample of every survey.
-                if (score <= best) continue;
+                // Filtered against secondBest (not best) so a genuine runner-up still gets validated
+                // even once the best option for this rest spot is already locked in.
+                if (score <= secondBest) continue;
                 // Position on a ball that can't physically drop in this pocket is no position at all.
                 if (!DropsInto(objPos, pocketDir, pocketIndex)) continue;
                 if (!cue.IsPathClear(restPos, ghost, next, cueBall, true, SightMargin)) continue;
@@ -671,10 +693,15 @@ public class SnookerAI : MonoBehaviour
                 };
                 shot.powerFraction = PotPowerFor(shot);
                 CompensateForThrow(ref shot);
-                if (IsMakeableAtThisSkill(shot)) best = score;
+                if (!IsMakeableAtThisSkill(shot)) continue;
+
+                if (score > best) { secondBest = best; best = score; }
+                else if (score > secondBest) { secondBest = score; }
             }
         }
-        return best;
+        // The backup option counts for less than the primary one - it's a hedge, not an equally
+        // weighted alternative.
+        return best + secondBest * 0.15f;
     }
 
     // How good a leave this spin and pace give, allowing for the rest estimate being off. In play the
@@ -682,17 +709,36 @@ public class SnookerAI : MonoBehaviour
     // and a leave that is only good at exactly the predicted spot was the usual way a visit ended
     // (predicted a makeable colour, arrived with none). Averaging the predicted spot with 30% shorter
     // and 30% longer travel favours leaves that survive the error.
+    //
+    // That alone only covers error ALONG the predicted travel line. Real misses are sideways too - a
+    // stun shot predicted to die on the spot can still drift left or right - so this also samples a
+    // fixed lateral offset either side of the object ball's own departure line, independent of how far
+    // the cue ball was predicted to travel (unlike the along-line samples, which skip entirely when
+    // travel is near zero - a near-stun leave still has lateral uncertainty even with no travel to
+    // perturb). A leave that only looks good from the exact predicted point, in every direction,
+    // is exactly the "random leftover" a real position player wouldn't rely on.
     private float LeaveQuality(ShotCandidate candidate, Vector2 spin, float power)
     {
         Vector3 rest = ApproximateCueRest(candidate, spin, power);
+        Vector3 objectDir = Flat3(candidate.pocket - candidate.ghost).normalized;
         Vector3 travel = Flat3(rest - candidate.ghost) * 0.3f;
+        Vector3 lateral = Vector3.Cross(Vector3.up, objectDir) * 0.25f;
 
         float total = NextShotQuality(rest, candidate.objectBall);
-        if (travel.sqrMagnitude < 0.01f) return total;
+        int samples = 1;
 
-        total += NextShotQuality(cue.ClampToCushion(rest, rest + travel), candidate.objectBall);
-        total += NextShotQuality(rest - travel, candidate.objectBall);
-        return total / 3f;
+        if (travel.sqrMagnitude >= 0.01f)
+        {
+            total += NextShotQuality(cue.ClampToCushion(rest, rest + travel), candidate.objectBall);
+            total += NextShotQuality(rest - travel, candidate.objectBall);
+            samples += 2;
+        }
+
+        total += NextShotQuality(cue.ClampToCushion(rest, rest + lateral), candidate.objectBall);
+        total += NextShotQuality(cue.ClampToCushion(rest, rest - lateral), candidate.objectBall);
+        samples += 2;
+
+        return total / samples;
     }
 
     // Extra pace a positional level may put on a pot purely to send the cue ball further. The pot's own
@@ -1064,7 +1110,7 @@ public class SnookerAI : MonoBehaviour
             aimDir = best.aimDir,
             spin = best.spin,
             powerFraction = best.powerFraction,
-            nominate = gameManager.NeedsColourNomination ? best.type : (BallType?)null,
+            nominate = (gameManager.NeedsColourNomination || gameManager.IsFreeBallAvailable) ? best.type : (BallType?)null,
             isSafety = false,
             potScore = best.potScore,
             finalScore = best.finalScore,
@@ -1236,7 +1282,9 @@ public class SnookerAI : MonoBehaviour
 
     private BallType? NominationFor(Rigidbody ball)
     {
-        if (!gameManager.NeedsColourNomination || ball == null) return null;
+        // Same "does this shot need a nomination at all" question, now with two reasons it might:
+        // the normal post-red colour pick, or a free ball needing its one-shot substitute chosen.
+        if ((!gameManager.NeedsColourNomination && !gameManager.IsFreeBallAvailable) || ball == null) return null;
         var id = ball.GetComponent<BallIdentity>();
         return id != null ? id.Type : (BallType?)null;
     }
@@ -1338,7 +1386,12 @@ public class SnookerAI : MonoBehaviour
         gameManager.SetAiActing(true);
 
         if (plan.nominate.HasValue)
-            gameManager.OnColourNominated(plan.nominate.Value);
+        {
+            // Same field, two possible destinations - whichever kind of nomination this shot actually
+            // needed (see NominationFor) is the one GameManager is currently expecting.
+            if (gameManager.IsFreeBallAvailable) gameManager.NominateFreeBall(plan.nominate.Value);
+            else gameManager.OnColourNominated(plan.nominate.Value);
+        }
 
         // Spin has to be set while aim is still free - GameManager refuses SetSpinOffset once confirm
         // locks the shot in, exactly as it does for the player's spin widget.
