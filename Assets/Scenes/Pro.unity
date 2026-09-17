@@ -1266,8 +1266,8 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.5
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Radius: 0.31979656
+  m_Center: {x: -0.2725688, y: 0, z: -0.23741394}
 --- !u!23 &186814546
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -2801,8 +2801,8 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.5
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Radius: 0.3390046
+  m_Center: {x: -0.3319074, y: 0, z: 0.38531902}
 --- !u!23 &397775893
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -3408,8 +3408,8 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.5
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Radius: 0.30761027
+  m_Center: {x: 0.37127012, y: 0, z: 0.33771545}
 --- !u!23 &659154086
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -5384,7 +5384,6 @@ MonoBehaviour:
   cuestickref: {fileID: 1018117858}
   Mass: 0.3
   Drag: 0
-  AngularDrag: 0.05
   forceMultiplier: 0.15
   cueHitSound: {fileID: 8300000, guid: 981abfbb1c03902419ddd8088c0b1440, type: 3}
   pitchRange: {x: 0.95, y: 1.05}
@@ -6504,8 +6503,8 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.5
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Radius: 0.3214284
+  m_Center: {x: 0.2947262, y: 0, z: -0.30095783}
 --- !u!23 &1304496871
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -7422,8 +7421,8 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.5
-  m_Center: {x: 0, y: 0, z: 0}
+  m_Radius: 0.5803331
+  m_Center: {x: -0.08033314, y: 0, z: 0}
 --- !u!23 &1485315081
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -7727,7 +7726,6 @@ MonoBehaviour:
   cue: {fileID: 0}
   baseStrikeForce: 30
   moveThreshold: 0.01
-  snapToZeroThreshold: 0.09
   playAreaMin: {x: -5.9, y: -8.5}
   playAreaMax: {x: 5.9, y: 8.5}
   minimumY: 3
@@ -7738,6 +7736,8 @@ MonoBehaviour:
   colourNominationPanel: {fileID: 0}
   playerScores: 0000000000000000
   currentPlayerIndex: 0
+  enforcePlayerTurnLimit: 0
+  maxPlayerTurns: 5
 --- !u!4 &1530018204
 Transform:
   m_ObjectHideFlags: 0
@@ -10793,6 +10793,8 @@ MonoBehaviour:
   cueVisual: {fileID: 1044354697}
   powerSlider: {fileID: 239483273}
   profile: {fileID: 11400000, guid: 4d991daf442d9724ead254f41e094c48, type: 2}
+  legendaryMode: 0
+  legendaryProfile: {fileID: 0}
   aiPlayerIndex: 1
   thinkingDelaySeconds: {x: 0.5, y: 1.5}
   aimAnimationSeconds: 0.5

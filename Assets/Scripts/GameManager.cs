@@ -764,6 +764,16 @@ public class GameManager : MonoBehaviour
     [SerializeField] private int[] playerScores = new int[2];
     [SerializeField] private int currentPlayerIndex = 0;
 
+    // ----- Normal scene only: hard cap on how many turns the (human) player gets in the whole
+    // frame. Leave enforcePlayerTurnLimit false everywhere else - Pro is untouched.
+    [Header("Legendary Mode - Player Turn Limit (Normal scene only)")]
+    [Tooltip("Turn the player-turn-limit rule on. Leave false in every scene except Normal.")]
+    [SerializeField] private bool enforcePlayerTurnLimit = false;
+    [Tooltip("Player loses automatically (AI declared winner) after this many of their own turns, " +
+             "win or not. Tweak freely - 4 or 5 per the design.")]
+    [SerializeField] private int maxPlayerTurns = 5;
+    private int playerTurnsTaken = 0;
+
     public int GetScore(int playerIndex) => playerScores[playerIndex];
     public int CurrentPlayerIndex => currentPlayerIndex;
 
@@ -951,7 +961,10 @@ public class GameManager : MonoBehaviour
     // The black has gone down off the end of the colour sequence - the frame is over.
     // Highest score wins; equal scores are reported as a tie (the real respotted-black
     // tie-break procedure is not modelled).
-    private void EndFrame()
+    // forcedWinner overrides the normal score comparison - used by the Normal scene's player
+    // turn-limit (see CountPlayerTurnAndMaybeEndFrame) to end the frame with a fixed winner
+    // regardless of score. Every other caller leaves it null and gets the original behaviour.
+    private void EndFrame(int? forcedWinner = null)
     {
         if (frameOver) return;
         frameOver = true;
@@ -961,9 +974,17 @@ public class GameManager : MonoBehaviour
         strikeRequested = false;
         if (awaitingPlacement) EndPlacement(); // a foul on the final black still ends the frame
 
-        int winner = -1;
-        if (playerScores[0] > playerScores[1]) winner = 0;
-        else if (playerScores[1] > playerScores[0]) winner = 1;
+        int winner;
+        if (forcedWinner.HasValue)
+        {
+            winner = forcedWinner.Value;
+        }
+        else
+        {
+            winner = -1;
+            if (playerScores[0] > playerScores[1]) winner = 0;
+            else if (playerScores[1] > playerScores[0]) winner = 1;
+        }
 
         Debug.Log(winner >= 0
             ? $"[GMDebug] FRAME OVER - Player {winner} wins {playerScores[0]}-{playerScores[1]}."
@@ -985,6 +1006,26 @@ public class GameManager : MonoBehaviour
     // reads targetState/currentTargetColour as they were going INTO this shot.
 
     private int OpponentIndex => (currentPlayerIndex + 1) % playerScores.Length;
+
+    // Normal scene only. Counts one genuine end of the PLAYER's (non-AI) turn - a legal miss or a
+    // foul, i.e. exactly the two PassTurn() call sites below in EvaluateFoul(). Deliberately NOT
+    // hooked into PassTurn() itself: ChooseFoulPlayAgain() also calls PassTurn() to resolve a foul
+    // decision, and that flip is an administrative follow-up to a turn that already ended here, not a
+    // second turn ending - counting it there would burn the player's turn budget just for choosing
+    // "make them play again" without ever taking a shot.
+    // Returns true if hitting the cap just force-ended the frame, so the caller can skip the normal
+    // turn-pass/foul-decision flow below it.
+    private bool CountPlayerTurnAndMaybeEndFrame()
+    {
+        if (!enforcePlayerTurnLimit || currentPlayerIndex == aiPlayerIndex) return false;
+
+        playerTurnsTaken++;
+        if (playerTurnsTaken < maxPlayerTurns) return false;
+
+        if (debugLogging) Debug.Log($"[GMDebug] Player used all {maxPlayerTurns} turns - AI wins by turn limit.");
+        EndFrame(aiPlayerIndex);
+        return true;
+    }
 
     private void PassTurn()
     {
@@ -1248,7 +1289,7 @@ public class GameManager : MonoBehaviour
             }
             else
             {
-
+                if (CountPlayerTurnAndMaybeEndFrame()) return; // Legendary: player's turn cap reached
                 PassTurn();
             }
         }
@@ -1257,6 +1298,7 @@ public class GameManager : MonoBehaviour
             lastShotWasFoul = true;
             int pointsAwardedTo = OpponentIndex;
             AwardPoints(pointsAwardedTo, points);
+            if (CountPlayerTurnAndMaybeEndFrame()) return; // Legendary: player's turn cap reached
             PassTurn();
 
             if (debugLogging) Debug.Log($"[GMDebug] FOUL: {points} pts to Player {pointsAwardedTo} - " +

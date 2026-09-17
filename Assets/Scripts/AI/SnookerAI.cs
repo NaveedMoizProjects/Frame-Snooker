@@ -2,10 +2,10 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// The single shot-selection algorithm from AI_SHOT_SELECTION.md, shared by all three difficulty
-// levels. Nothing here branches on "which level am I" - the level is entirely the AIDifficultyProfile
-// asset wired into this component, so Beginner/Medium/Pro are three sets of numbers, not three
-// scripts. Everything it does goes through the same GameManager/Cue calls a human's input produces.
+// The single shot-selection algorithm from AI_SHOT_SELECTION.md, shared by every difficulty level.
+// Nothing here branches on "which level am I" - the level is entirely the AIDifficultyProfile asset
+// wired into this component, so each scene's difficulty is a set of numbers, not a separate script.
+// Everything it does goes through the same GameManager/Cue calls a human's input produces.
 public class SnookerAI : MonoBehaviour
 {
     [Header("Scene refs (left empty = found at Start)")]
@@ -15,8 +15,18 @@ public class SnookerAI : MonoBehaviour
     [SerializeField] private ShotPowerSlider powerSlider;
 
     [Header("Difficulty")]
-    [Tooltip("Beginner / Medium / Pro asset. This is the ONLY thing that differs between levels.")]
+    [Tooltip("This scene's AIDifficultyProfile asset. This is the ONLY thing that differs between scenes.")]
     [SerializeField] private AIDifficultyProfile profile;
+
+    [Header("Legendary Mode (Normal scene only)")]
+    [Tooltip("When true, 'profile' above is swapped for 'legendaryProfile' at Start, before any shot-" +
+             "selection logic reads it. Leave false in every scene except Normal - Pro's own " +
+             "difficulty is completely untouched by this.")]
+    [SerializeField] private bool legendaryMode = false;
+    [Tooltip("The much tighter AIDifficultyProfile used only while legendaryMode is on. Tune this " +
+             "asset's own numbers (aim error, soft pot cap, pressure ramp, safety chance) to retune " +
+             "this difficulty - no code change needed.")]
+    [SerializeField] private AIDifficultyProfile legendaryProfile;
 
     [Tooltip("Which of GameManager's two players this AI plays as. The other index is the human.")]
     [SerializeField] private int aiPlayerIndex = 1;
@@ -168,6 +178,12 @@ public class SnookerAI : MonoBehaviour
         if (cue == null) cue = FindObjectOfType<Cue>();
         if (cueVisual == null) cueVisual = FindObjectOfType<CueVisualController>();
         if (powerSlider == null) powerSlider = FindObjectOfType<ShotPowerSlider>();
+
+        // Normal scene only: swap in the much more accurate profile before anything below reads
+        // from 'profile'. Every other scene leaves legendaryMode false, so this is a no-op there -
+        // none of the shot-selection logic that follows (all of which reads 'profile') needed to
+        // change at all.
+        if (legendaryMode && legendaryProfile != null) profile = legendaryProfile;
 
         if (gameManager == null || cue == null || cueVisual == null || powerSlider == null || profile == null)
         {
@@ -969,8 +985,8 @@ public class SnookerAI : MonoBehaviour
             candidates.RemoveAll(c => !c.makeable);
             if (candidates.Count == 0) return false;
         }
-        // A level that never plays safe (Beginner: "always just goes for the ball on, even when that's a
-        // bad idea") still goes for the easiest pot it sees - makeability only puts the ones it can
+        // A level that never plays safe (always just goes for the ball on, even when that's a bad
+        // idea) still goes for the easiest pot it sees - makeability only puts the ones it can
         // actually make first, so it misses the hard ones naturally instead of tapping the ball on.
         candidates.Sort((a, b) => a.makeable != b.makeable
             ? b.makeable.CompareTo(a.makeable)
@@ -1391,6 +1407,16 @@ public class SnookerAI : MonoBehaviour
             // needed (see NominationFor) is the one GameManager is currently expecting.
             if (gameManager.IsFreeBallAvailable) gameManager.NominateFreeBall(plan.nominate.Value);
             else gameManager.OnColourNominated(plan.nominate.Value);
+        }
+        else if (gameManager.NeedsColourNomination)
+        {
+            // Safety net: some of the safety/escape fallback plans below don't always compute a
+            // nomination even when one is required. Without this, ConfirmButtonPressed rejects the
+            // shot ("nominate a colour first"), PlayLoop retries, PlanShot rebuilds the exact same
+            // plan from the same unchanged table position, and it rejects again - forever. Any legal
+            // colour satisfies GameManager here (it doesn't have to be the one actually aimed at), so
+            // this guarantees the shot can always be confirmed.
+            gameManager.OnColourNominated(BallType.Yellow);
         }
 
         // Spin has to be set while aim is still free - GameManager refuses SetSpinOffset once confirm

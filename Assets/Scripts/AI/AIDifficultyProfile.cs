@@ -2,8 +2,8 @@ using UnityEngine;
 
 public enum SpinUsage { None, Basic, Full }
 
-// Data for the one shared algorithm in SnookerAI (AI_SHOT_SELECTION.md). Beginner/Medium/Pro are
-// three assets of this type, not three code paths - see AI_DIFFICULTY_LEVELS.md.
+// Data for the one shared algorithm in SnookerAI (AI_SHOT_SELECTION.md). Each difficulty level is
+// its own asset of this type, not a separate code path - see AI_DIFFICULTY_LEVELS.md.
 [CreateAssetMenu(fileName = "AIDifficultyProfile", menuName = "Snooker/AI Difficulty Profile")]
 public class AIDifficultyProfile : ScriptableObject
 {

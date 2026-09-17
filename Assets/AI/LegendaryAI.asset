@@ -10,21 +10,21 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6fb00b2500e85df4a895a8f0763a13f4, type: 3}
-  m_Name: MediumAI
+  m_Name: LegendaryAI
   m_EditorClassIdentifier: 
-  aimErrorDegreesEasy: {x: 0.04, y: 0.12}
-  aimErrorDegreesHard: {x: 0.04, y: 0.12}
+  aimErrorDegreesEasy: {x: 0.01, y: 0.01}
+  aimErrorDegreesHard: {x: 0.01, y: 0.015}
   easyPotScore: 0.8
   hardPotScore: 0.3
-  aimErrorDegreesPerBallPotted: 0
-  powerErrorPercent: 10
+  aimErrorDegreesPerBallPotted: 0.0005
+  powerErrorPercent: 1
   powerErrorFloorFraction: 0.2
-  minAcceptablePotScore: 0.3
-  makeabilityErrorFraction: 0.25
-  safetyProbability: {x: 0.15, y: 0.25}
-  safetyRollPotScore: 0.45
-  positionWeight: 0.3
-  deliberateSpinUsage: 1
-  candidateSurveyCount: 6
-  softPotCap: {x: 6, y: 8}
-  pressureRamp: 0.8
+  minAcceptablePotScore: 0.02
+  makeabilityErrorFraction: 0.12
+  safetyProbability: {x: 0, y: 0}
+  safetyRollPotScore: 0
+  positionWeight: 0.6
+  deliberateSpinUsage: 2
+  candidateSurveyCount: 0
+  softPotCap: {x: 20, y: 25}
+  pressureRamp: 0.05
