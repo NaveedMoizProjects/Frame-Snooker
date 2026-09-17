@@ -15,6 +15,9 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Rigidbody cueBall;
     [Tooltip("Where the cue ball respawns to if it gets potted (e.g. the 'D' / baulk spot).")]
     [SerializeField] private Transform cueBallRespawnPoint;
+    [Tooltip("Optional: if left empty, found via FindObjectOfType at Start. Used only for the free-ball " +
+             "snooker line-of-sight check (Cue.IsPathClear) - see EvaluateFreeBallEligibility.")]
+    [SerializeField] private Cue cue;
 
     // Balls potted THIS shot - cleared at the start of each new shot, read once the
     // shot finishes (OnAllBallsStopped) by whatever consumes it (Phase 3/4 rules later).
@@ -36,8 +39,6 @@ public class GameManager : MonoBehaviour
     [Header("Ball Rest Thresholds")]
     [Tooltip("Above this speed, a ball counts as 'moving' and blocks the next shot.")]
     [SerializeField] private float moveThreshold = 0.01f;
-    [Tooltip("Below this speed, a moving ball is snapped to a full stop to kill physics jitter.")]
-    [SerializeField] private float snapToZeroThreshold = 0.09f;
 
     [Header("Off-Table Safeguard")]
     [Tooltip("Min X/Z of the play area. Anything outside this is treated as 'the cue ball left the table'. " +
@@ -53,6 +54,11 @@ public class GameManager : MonoBehaviour
     [Tooltip("Shown while the player is placing the cue ball in the D: prompt label + a tick button wired to ConfirmPlacement.")]
     [SerializeField] private GameObject placementPanel;
 
+    [Header("Foul Play/Play-Again Decision (FOUL_PLAY_AGAIN_RULE.md)")]
+    [Tooltip("Shown while IsAwaitingFoulDecision is true: Play / Make opponent play again buttons, " +
+             "wired to ChooseFoulPlay/ChooseFoulPlayAgain.")]
+    [SerializeField] private GameObject foulDecisionPanel;
+
     [Header("TEMP DEBUG - delete after fixing")]
     [SerializeField] private bool debugLogging = true;
     private float debugLogTimer2 = 0f;
@@ -64,6 +70,79 @@ public class GameManager : MonoBehaviour
     private bool inputLocked = false;
     private bool frameOver = false;
     private bool awaitingPlacement = false;
+
+    // FOUL_PLAY_AGAIN_RULE.md section 2: after any foul, the non-offending player (this index)
+    // decides whether to play on or send the fouling player back in, before any placement-in-D
+    // or normal-aim flow starts. foulDecisionCueBallPotted remembers whether ball-in-hand should
+    // follow once the decision resolves, since it applies to whichever player ends up actually
+    // playing next, not necessarily foulDecisionForPlayerIndex.
+    private bool awaitingFoulDecision = false;
+    private int foulDecisionForPlayerIndex = -1;
+    private bool foulDecisionCueBallPotted = false;
+
+    // Which player index (if any) is AI-controlled, and whether the AI is mid-way through taking its
+    // own shot right now. Registered by SnookerAI.Start(); used only to stop a human's own UI input
+    // (Confirm button, colour nomination, the power slider) from being accepted during the AI's turn -
+    // none of those are gated on whose turn it is, so a stray click while the AI is "thinking" could set
+    // confirmMode/currentTargetColour out from under it. The AI's own calls always pass aiIsActing=true
+    // around themselves, so this never blocks the AI acting on its own turn.
+    private int aiPlayerIndex = -1;
+    private bool aiIsActing = false;
+    public void RegisterAiPlayer(int playerIndex) => aiPlayerIndex = playerIndex;
+    public void SetAiActing(bool acting) => aiIsActing = acting;
+    public bool IsAiTurn => aiPlayerIndex >= 0 && currentPlayerIndex == aiPlayerIndex;
+    private bool BlockedAsHumanInputDuringAiTurn => IsAiTurn && !aiIsActing;
+
+    // Set by EvaluateFoul, read by EvaluateShotResult, which runs straight after it. A red potted on
+    // a foul shot must NOT advance Red -> Colour: after a foul the incoming player is still on Red
+    // while reds remain. Without this the state flipped anyway, and since only a legal colour pot
+    // flips it back, the frame got stuck on Colour with reds still on the table.
+    private bool lastShotWasFoul = false;
+    // Exposed so pot celebration effects (PocketTrigger) can hold off spawning until the whole shot
+    // resolves and this is known - a ball dropping mid-shot doesn't yet know if the shot is a foul.
+    public bool LastShotWasFoul => lastShotWasFoul;
+
+    // ----- Free Ball (FREE_BALL.md) -----
+    // Set true by EvaluateFoul whenever a foul just occurred; consumed (checked and cleared) once the
+    // resulting cue ball position is actually final - see the callers of EvaluateFreeBallEligibility.
+    // Not evaluated immediately inside EvaluateFoul because a potted cue ball means ball-in-hand: the
+    // real resting position (and therefore whether the incoming player is really snookered) isn't
+    // known until they've placed it.
+    private bool pendingFreeBallCheck = false;
+    // Awarded for exactly one upcoming shot once EvaluateFreeBallEligibility confirms every current
+    // ball-on is unreachable as a direct result of the foul just evaluated.
+    private bool freeBallAvailable = false;
+    // Reds-on-table status captured at the moment the free ball was awarded (not re-read later, since
+    // the free-ball shot itself can change that count before scoring/consequences are resolved).
+    private bool freeBallRedsRemained = false;
+    // The substitute ball-on the player has chosen for the pending free-ball shot, if any - see
+    // NominateFreeBall. Null means they haven't nominated (or don't intend to use the free ball).
+    private BallType? freeBallNomination = null;
+
+    // Snapshots of the two fields above taken by EvaluateFoul at the start of evaluating a shot, so
+    // EvaluateShotResult (which runs immediately after) can apply the free-ball substitution rules to
+    // whatever was potted THIS shot without racing the reset below, which clears the "next shot"
+    // fields unconditionally once this shot's legality is known.
+    private BallType? lastShotFreeBallNomination = null;
+    private bool lastShotFreeBallRedsRemained = false;
+
+    public bool IsFreeBallAvailable => freeBallAvailable;
+    public BallType? FreeBallNomination => freeBallNomination;
+
+    // Called by whatever lets the player pick a ball-on for a free-ball shot (BallAimClickTarget's
+    // click-to-aim doubles as nomination here, or the AI via SnookerAI's normal nomination pipeline -
+    // see NominationFor). Unlike OnColourNominated, any ball except the cue is acceptable - the doc
+    // allows nominating "any ball on the table", not just colours.
+    public void NominateFreeBall(BallType chosen)
+    {
+        if (BlockedAsHumanInputDuringAiTurn) return;
+        if (confirmMode || awaitingPlacement || awaitingFoulDecision) return;
+        if (!freeBallAvailable) return;
+        if (chosen == BallType.Cue) return;
+
+        freeBallNomination = chosen;
+        if (debugLogging) Debug.Log($"[GMDebug] Free ball nominated: {chosen}");
+    }
 
     // Spin: the live dot position from the spin widget, and the value locked in for the shot being
     // played. RequestStrike copies one into the other before resetting the live value, so spin never
@@ -133,6 +212,11 @@ public class GameManager : MonoBehaviour
         if (cameraSwitching == null)
             Debug.LogWarning("GameManager: No CameraSwitching found in scene.", this);
 
+        // Needed for the free-ball snooker check (Cue.IsPathClear) - see EvaluateFreeBallEligibility.
+        if (cue == null) cue = FindObjectOfType<Cue>();
+        if (cue == null)
+            Debug.LogWarning("GameManager: No Cue found in scene - free-ball snooker detection will be skipped.", this);
+
         Debug.Log($"GameManager initialized: baseStrikeForce={baseStrikeForce} => GetStrikeForce()={GetStrikeForce()}");
 
         // Set correct initial visibility (starts hidden, since targetState starts on Red).
@@ -145,15 +229,22 @@ public class GameManager : MonoBehaviour
 
     // Shows the manually-built panel exactly when NeedsColourNomination is true, hides it
     // otherwise. Called from Awake's OnTargetChanged subscription and once at Start.
+    // The picker panel is no longer how a colour gets nominated - the player clicks the actual
+    // ball on the table instead (ColourBallClickTarget), reflected on the Canvas by
+    // SelectedColourIndicator. Kept as a permanently-hidden method rather than removing the field
+    // and every reference to it.
     private void RefreshColourNominationPanel()
     {
         if (colourNominationPanel != null)
-            colourNominationPanel.SetActive(NeedsColourNomination);
+            colourNominationPanel.SetActive(false);
     }
 
     public void Cam1() => cameraSwitching?.SwitchToTopDownCamera();
     public void Cam2() => cameraSwitching?.SwitchToThirdPersonCamera();
     public void Cam3() => cameraSwitching?.SwitchToFirstPersonCamera();
+
+    // Wired to the single camera-toggle button: alternates top-down/third-person on every click.
+    public void ToggleCamera() => cameraSwitching?.ToggleTopDownThirdPerson();
 
     public bool isNextPlay() => nextplay;
 
@@ -222,14 +313,12 @@ public class GameManager : MonoBehaviour
                     Debug.Log($"[GMDebug] {ball.gameObject.name} is moving at speed {speed:F4} slip {slip:F4} pos={ball.transform.position}");
             }
 
-            // Also clears vertical-axis side spin left on a resting ball, which produces no slip and
-            // would otherwise carry into the next shot.
-            if (speed < snapToZeroThreshold && slip < snapToZeroThreshold
-                && (ball.velocity != Vector3.zero || ball.angularVelocity != Vector3.zero))
-            {
-                ball.velocity = Vector3.zero;
-                ball.angularVelocity = Vector3.zero;
-            }
+            // Force-zeroing a ball's velocity here (below a separate, coarser "snapToZeroThreshold")
+            // used to fire before BallRollingFriction's own hard-stop (stopSpeedThreshold, much finer
+            // and slip-aware) got a chance to run - cutting the last, most natural part of a real
+            // roll-to-a-stop short. BallRollingFriction already zeroes velocity/angularVelocity itself
+            // once a ball is genuinely at rest, every FixedUpdate, so that's removed here - this loop
+            // only needs to WATCH speed/slip for the anyMoving check above, not force-stop anything.
         }
 
         nextplay = !anyMoving;
@@ -249,6 +338,17 @@ public class GameManager : MonoBehaviour
         return contactVel.magnitude;
     }
 
+    // Project settings leave Physics.autoSyncTransforms off, so a write to transform.position alone
+    // moves the visible ball while the physics body keeps its old pose - and the next physics step
+    // drags the ball back. Every respot/respawn has to move the body itself.
+    private static void TeleportBall(Rigidbody ball, Vector3 position)
+    {
+        ball.velocity = Vector3.zero;
+        ball.angularVelocity = Vector3.zero;
+        ball.position = position;
+        ball.transform.position = position;
+    }
+
     private float RadiusOf(Rigidbody ball)
     {
         if (!ballRadius.TryGetValue(ball, out float r))
@@ -265,7 +365,14 @@ public class GameManager : MonoBehaviour
     public bool IsConfirmMode => confirmMode;
     public bool IsStrikeRequested => strikeRequested;
     // Placement replaces normal aiming input entirely, so it locks the cue the same way confirm does.
-    public bool IsInputLocked => inputLocked || awaitingPlacement;
+    // Blocks Confirm/Strike/spin/ball-click-targeting - anything that could commit to or start a shot.
+    public bool IsInputLocked => inputLocked || awaitingPlacement || awaitingFoulDecision;
+    // Narrower than IsInputLocked: only the cases where the cue itself should stop moving entirely
+    // (post-Confirm, and ball-in-hand). A pending foul decision does NOT belong here - the player
+    // still needs to freely look around the table (via the aim-follow camera) to judge the position
+    // before choosing Play or Play Again; only actually taking a shot is blocked during that choice,
+    // which ConfirmButtonPressed/RequestStrike already refuse on their own regardless of this.
+    public bool IsAimFrozen => inputLocked || awaitingPlacement;
 
     // Called by the single on-screen button.
     // First press enters Confirm mode (locks input). Second press requests the strike.
@@ -277,9 +384,23 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        if (BlockedAsHumanInputDuringAiTurn)
+        {
+            Debug.Log("[GMDebug] Ignoring Confirm - it's the AI's turn.");
+            return;
+        }
+
         if (!nextplay)
         {
             Debug.Log("Cannot confirm while balls are moving.");
+            return;
+        }
+
+        // FOUL_PLAY_AGAIN_RULE.md section 2: the non-offending player must decide play vs
+        // play-again before any normal aim/Confirm flow starts.
+        if (awaitingFoulDecision)
+        {
+            Debug.Log("Cannot confirm: a foul decision (play or play-again) is pending.");
             return;
         }
 
@@ -317,6 +438,7 @@ public class GameManager : MonoBehaviour
     // "Clear" button - cancels aiming/confirm WITHOUT striking, goes back to free aim.
     public void CancelConfirm()
     {
+        if (BlockedAsHumanInputDuringAiTurn) return;
         confirmMode = false;
         inputLocked = false;
         strikeRequested = false;
@@ -327,7 +449,21 @@ public class GameManager : MonoBehaviour
     // currently in progress or just finished" - exactly what section 4 of the doc needs.
     public void RequestStrike()
     {
-        if (frameOver || awaitingPlacement) return;
+        if (frameOver || awaitingPlacement || awaitingFoulDecision) return;
+        if (BlockedAsHumanInputDuringAiTurn) return;
+
+        // Requesting a strike only makes sense once Confirm has actually locked the shot in - Cue.cs
+        // only ever fires off BOTH confirmMode and strikeRequested being true together. Setting this
+        // unconditionally used to leave strikeRequested permanently true whenever ConfirmButtonPressed
+        // had silently no-op'd for any reason (mode not entered, wrong turn, still awaiting nomination)
+        // - nothing but a real strike ever clears it, so SnookerAI.MyTurnToAct() (which requires
+        // !IsStrikeRequested) was then dead forever. Refusing here instead of blindly setting the flag
+        // means a rejected request is simply a no-op the caller can safely retry, not a permanent stall.
+        if (!confirmMode)
+        {
+            Debug.LogWarning("[GMDebug] RequestStrike ignored - not in confirm mode yet.");
+            return;
+        }
 
         strikeRequested = true;
         strikeSpin = spinOffset;
@@ -364,7 +500,7 @@ public class GameManager : MonoBehaviour
     // confirmed, and clamped inside 85% of the ball so the outer (miscue) ring is unreachable.
     public void SetSpinOffset(Vector2 offset)
     {
-        if (confirmMode || awaitingPlacement) return;
+        if (confirmMode || awaitingPlacement || awaitingFoulDecision) return;
         spinOffset = Vector2.ClampMagnitude(offset, MaxSpinRadius);
     }
 
@@ -391,7 +527,7 @@ public class GameManager : MonoBehaviour
             ball.angularVelocity = Vector3.zero;
 
             if (cueBallRespawnPoint != null)
-                ball.transform.position = cueBallRespawnPoint.position;
+                TeleportBall(ball, cueBallRespawnPoint.position);
             else
                 Debug.LogWarning("GameManager: cueBallRespawnPoint not assigned - cue ball left where it was potted.", this);
 
@@ -500,9 +636,7 @@ public class GameManager : MonoBehaviour
         else
         {
             lastValidPlacement = FindDefaultPlacement(current.y);
-            cueBall.velocity = Vector3.zero;
-            cueBall.angularVelocity = Vector3.zero;
-            cueBall.transform.position = lastValidPlacement;
+            TeleportBall(cueBall, lastValidPlacement);
         }
 
         awaitingPlacement = true;
@@ -563,6 +697,7 @@ public class GameManager : MonoBehaviour
         }
         EndPlacement();
         if (debugLogging) Debug.Log($"[GMDebug] Cue ball placed at {cueBall.transform.position} - aim and play.");
+        TryResolvePendingFreeBallCheck();
     }
 
     private void EndPlacement()
@@ -640,6 +775,11 @@ public class GameManager : MonoBehaviour
     // Called by the nomination UI when the player taps a colour while on Colour state.
     public void OnColourNominated(BallType chosen)
     {
+        if (BlockedAsHumanInputDuringAiTurn)
+        {
+            Debug.LogWarning($"[GMDebug] Ignoring nomination of {chosen} - it's the AI's turn.");
+            return;
+        }
         if (targetState != TargetBallState.Colour)
         {
             Debug.LogWarning($"[GMDebug] Ignoring nomination of {chosen} - not currently in Colour state.");
@@ -702,25 +842,66 @@ public class GameManager : MonoBehaviour
                 continue;
             }
 
+            // FREE_BALL.md: a LEGALLY potted free-ball nomination is treated as whatever it stood in
+            // for - a red while reds remained (flip to Colour, nomination needed next, exactly like a
+            // real red pot), or the real next-in-sequence colour once they're gone (respot/advance via
+            // ResolveColourPot, reused as-is since RedsRemainingOnTable() is guaranteed 0 here so it
+            // always takes that method's permanent-removal/advance branch, never its respot branch).
+            // Only the ball actually nominated gets this - anything else potted the same shot (or a
+            // fouled free-ball attempt) resolves through the normal branches below untouched.
+            bool isFreeBallSubstitute = !lastShotWasFoul && lastShotFreeBallNomination.HasValue
+                                         && identity.Type == lastShotFreeBallNomination.Value;
+            if (isFreeBallSubstitute)
+            {
+                if (lastShotFreeBallRedsRemained)
+                {
+                    targetState = TargetBallState.Colour;
+                    currentTargetColour = null;
+                    OnTargetChanged?.Invoke(targetState, currentTargetColour);
+                }
+                else
+                {
+                    ResolveColourPot(identity, potted);
+                }
+                continue;
+            }
+
             if (identity.Type == BallType.Red)
             {
-                if (targetState == TargetBallState.Red)
+                // Only a LEGAL red pot earns the colour. A red that drops as part of a foul shot
+                // leaves the incoming player on Red, per the real rule - and crucially, flipping
+                // here on a foul used to strand the frame on Colour for good, because nothing but a
+                // legal colour pot flips it back. That made both players hunt colours while fifteen
+                // reds sat untouched.
+                if (targetState == TargetBallState.Red && !lastShotWasFoul)
                 {
                     targetState = TargetBallState.Colour;
                     currentTargetColour = null; // must be nominated before next shot (or auto-set if reds now gone)
                     OnTargetChanged?.Invoke(targetState, currentTargetColour);
                 }
-                // NOTE (known gap, flagged rather than solved here): if this red pot was actually
-                // part of a FOUL shot (e.g. cue ball hit a colour first, then also potted a red),
-                // this still flips targetState to Colour, which isn't strictly correct - the
-                // opponent should arguably still be "on Red" after a foul. EvaluateFoul already
-                // scores this correctly either way; only this state-transition edge case remains.
-                // Revisit if it matters for your rules strictness.
             }
             else
             {
                 ResolveColourPot(identity, potted);
             }
+        }
+
+        // Whatever removed the last red - a clean pot (handled above, but only sets
+        // currentTargetColour to null, "needs nominating or auto-set") or one dropping
+        // incidentally during a foul (the branch above skips it entirely, per the real rule
+        // that a foul keeps the incoming player on Red while reds remain) - once none are
+        // left there is nothing further to be "on Red" for, and the fixed colour sequence
+        // must actually start. AdvanceColourSequence seeds colourSequenceIndex from its
+        // "not started" -1 to 0 (Yellow) the first time this fires; without it,
+        // colourSequenceIndex stayed at -1 until the FIRST colour pot incremented it to 0,
+        // re-targeting the colour that pot had just potted (now off the table) instead of
+        // advancing to the next one - CollectLegalTargets/a human alike could then never
+        // legally hit anything again, since the "on" ball no longer existed.
+        if (RedsRemainingOnTable() == 0 && colourSequenceIndex < 0)
+        {
+            targetState = TargetBallState.Colour;
+            AdvanceColourSequence();
+            OnTargetChanged?.Invoke(targetState, currentTargetColour);
         }
     }
 
@@ -732,9 +913,7 @@ public class GameManager : MonoBehaviour
             // [Assumed, polish item] Spot-conflict rule (real snooker: nearest available spot
             // up the table if occupied) is not handled yet - straight respot to SpawnPosition
             // for now, per the doc's note that this edge case is rare and can be revisited later.
-            colourBall.transform.position = identity.SpawnPosition;
-            colourBall.velocity = Vector3.zero;
-            colourBall.angularVelocity = Vector3.zero;
+            TeleportBall(colourBall, identity.SpawnPosition);
             colourBall.gameObject.SetActive(true);
 
             targetState = TargetBallState.Red;
@@ -810,6 +989,19 @@ public class GameManager : MonoBehaviour
     private void PassTurn()
     {
         currentPlayerIndex = OpponentIndex;
+
+        // A colour is only "on" for the player who just potted a red. The moment their turn ends -
+        // missed the colour, or fouled - the incoming player is back on Red while reds remain.
+        // Without this the Colour state carried across the turn change, so BOTH players kept hunting
+        // that one colour with a full pack of reds still on the table.
+        // Reds gone is the exception: there the fixed Yellow->Black sequence must persist.
+        if (targetState == TargetBallState.Colour && RedsRemainingOnTable() > 0)
+        {
+            targetState = TargetBallState.Red;
+            currentTargetColour = null;
+            OnTargetChanged?.Invoke(targetState, currentTargetColour);
+        }
+
         if (debugLogging) Debug.Log($"[GMDebug] Turn passed - now Player {currentPlayerIndex}");
         OnTurnChanged?.Invoke(currentPlayerIndex);
     }
@@ -849,16 +1041,129 @@ public class GameManager : MonoBehaviour
         return highest;
     }
 
+    // The balls that currently count as "ball-on" per the normal (non-free-ball) rule - every red
+    // while on Red, or just the specific nominated/sequence colour while on Colour. Mirrors
+    // DefaultAimTargeting.IsLegalTarget / SnookerAI.CollectLegalTargets's own logic; used here only
+    // for the free-ball snooker check below, not for aiming or shot selection.
+    private IEnumerable<Rigidbody> CurrentBallsOn()
+    {
+        foreach (var ball in balls)
+        {
+            if (ball == null || !ball.gameObject.activeInHierarchy || ball == cueBall) continue;
+            var id = ball.GetComponent<BallIdentity>();
+            if (id == null) continue;
+
+            if (targetState == TargetBallState.Red) { if (id.Type == BallType.Red) yield return ball; }
+            else if (currentTargetColour.HasValue && id.Type == currentTargetColour.Value) yield return ball;
+        }
+    }
+
+    // How many directions around a ball-on's surface to sample for a clear line from the cue ball -
+    // see EvaluateFreeBallEligibility.
+    private const int FreeBallSightSamples = 16;
+
+    // FREE_BALL.md: called once the position resulting from a just-confirmed foul is actually final
+    // (see the pendingFreeBallCheck callers) - checks whether the incoming player is snookered on
+    // every current ball-on, i.e. no ball-on is reachable by any straight line from the cue ball's
+    // resting position. If every single one is blocked from every sampled angle, a free ball is
+    // awarded for their next shot.
+    //
+    // Deliberately direct-line-of-sight only - the doc's "or off a cushion" escape route needs real
+    // cushion-plane reflection geometry this project doesn't expose (Cue's cushion raycasts are
+    // internal, not exposed as plane data GameManager can reuse). Skipping it means this can award a
+    // free ball in some cases where a real referee, accounting for a bank-shot escape, would not - it
+    // never does the opposite (call a player snookered who actually has a clear direct pot), so the
+    // simplification only ever gives, never wrongly withholds.
+    private void EvaluateFreeBallEligibility()
+    {
+        freeBallAvailable = false;
+        if (cue == null || cueBall == null) return;
+
+        Vector3 cueBallPos = cueBall.transform.position;
+        float ballDiameter = cue.CueBallRadius * 2f;
+        bool anyBallOn = false;
+
+        foreach (var ball in CurrentBallsOn())
+        {
+            anyBallOn = true;
+            for (int i = 0; i < FreeBallSightSamples; i++)
+            {
+                float angle = i * (360f / FreeBallSightSamples) * Mathf.Deg2Rad;
+                Vector3 approach = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
+                Vector3 ghost = ball.transform.position + approach * ballDiameter;
+                if (cue.IsPathClear(cueBallPos, ghost, ball, cueBall, true))
+                    return; // at least one ball-on is reachable from at least one angle - not snookered
+            }
+        }
+
+        freeBallRedsRemained = RedsRemainingOnTable() > 0;
+        freeBallAvailable = anyBallOn; // vacuously false if there was no ball-on at all to test
+        if (freeBallAvailable && debugLogging)
+            Debug.Log("[GMDebug] FREE BALL - incoming player is snookered on every ball-on as a direct result of the foul.");
+    }
+
     // 6.1-6.4: single end-of-shot foul decision, run once per completed shot.
     private void EvaluateFoul()
     {
+        lastShotWasFoul = false;
         bool cueBallPotted = cueBall != null && PottedThisShot.Contains(cueBall);
         BallType? firstType = GetBallType(firstBallContacted);
+
+        // Snapshot this shot's free-ball state for EvaluateShotResult (runs right after this) before
+        // the unconditional consume at the bottom clears it for the *next* shot.
+        bool consumingFreeBall = freeBallAvailable && freeBallNomination.HasValue;
+        lastShotFreeBallNomination = consumingFreeBall ? freeBallNomination : null;
+        lastShotFreeBallRedsRemained = freeBallRedsRemained;
 
         bool legal;
         int points;
 
-        if (targetState == TargetBallState.Red)
+        if (consumingFreeBall)
+        {
+            // FREE_BALL.md: for this one shot, the nominated ball substitutes as ball-on - everything
+            // else about how a shot is judged (cue ball potted/no contact = foul, wrong first contact
+            // = foul, single legal pot = legal, miss = legal no-score, anything else = foul) mirrors
+            // the Red/Colour branches below exactly, just checked against the nomination instead of
+            // the normal target, and scored per the doc's substitution rule (1 point like a red while
+            // reds remain, or the real next colour's value once they're gone) instead of BallValue
+            // for the normal on-ball.
+            if (!freeBallRedsRemained && !currentTargetColour.HasValue)
+            {
+                Debug.LogWarning("[GMDebug] EvaluateFoul: free ball active in colours-only phase with no " +
+                                  "currentTargetColour - skipping foul check.");
+                return;
+            }
+
+            BallType nominated = freeBallNomination.Value;
+            int nominatedValue = freeBallRedsRemained ? BallValue[BallType.Red] : BallValue[currentTargetColour.Value];
+
+            if (cueBallPotted || firstBallContacted == null || !firstType.HasValue)
+            {
+                legal = false;
+                points = Mathf.Max(4, nominatedValue);
+            }
+            else if (firstType != nominated)
+            {
+                legal = false;
+                points = Mathf.Max(4, BallValue[firstType.Value]);
+            }
+            else if (PottedThisShot.Count == 1 && GetBallType(PottedThisShot[0]) == nominated)
+            {
+                legal = true;
+                points = nominatedValue;
+            }
+            else if (PottedThisShot.Count == 0)
+            {
+                legal = true;
+                points = 0;
+            }
+            else
+            {
+                legal = false;
+                points = Mathf.Max(4, nominatedValue);
+            }
+        }
+        else if (targetState == TargetBallState.Red)
         {
             // 6.2 - Player On Red
             // !firstType.HasValue means the recorded contact wasn't an identifiable ball, which
@@ -917,6 +1222,14 @@ public class GameManager : MonoBehaviour
                 legal = true;
                 points = BallValue[target];
             }
+            else if (PottedThisShot.Count == 0)
+            {
+                // Hit the colour that was on and potted nothing: a legal miss, same as on Red - no
+                // points, the turn simply passes. Scoring it as a foul penalised every missed colour
+                // and every safety played on a colour.
+                legal = true;
+                points = 0;
+            }
             else
             {
 
@@ -941,13 +1254,96 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            AwardPoints(OpponentIndex, points);
+            lastShotWasFoul = true;
+            int pointsAwardedTo = OpponentIndex;
+            AwardPoints(pointsAwardedTo, points);
             PassTurn();
 
-            if (debugLogging) Debug.Log($"[GMDebug] FOUL: {points} pts to Player {OpponentIndex}.");
+            if (debugLogging) Debug.Log($"[GMDebug] FOUL: {points} pts to Player {pointsAwardedTo} - " +
+                                          $"awaiting their play/play-again decision.");
 
-            // After PassTurn it's the non-offending player's turn - they get the ball in hand.
-            BeginPlacement();
+            // FOUL_PLAY_AGAIN_RULE.md: the non-offending player (now currentPlayerIndex, after
+            // PassTurn above) decides whether to play on or send the fouling player back in,
+            // BEFORE any placement-in-D or normal-aim flow starts. Ball in hand (driven by the
+            // cue ball being off the table, not by "a foul happened" - BALL_PLACEMENT_D.md
+            // section 1) is deferred until the decision resolves, since it applies to whichever
+            // player ends up actually playing next - see ChooseFoulPlay/ChooseFoulPlayAgain.
+            awaitingFoulDecision = true;
+            foulDecisionForPlayerIndex = currentPlayerIndex;
+            foulDecisionCueBallPotted = cueBallPotted;
+            RefreshFoulDecisionPanel();
+
+            // FREE_BALL.md: flag for a snooker check once the incoming player's cue ball position is
+            // actually final - see EvaluateFreeBallEligibility and its callers (ChooseFoulPlay,
+            // ChooseFoulPlayAgain, ConfirmPlacement). Not evaluated right here since a potted cue ball
+            // means ball-in-hand, and the real resting position isn't known until they've placed it.
+            pendingFreeBallCheck = true;
         }
+
+        // One-shot opportunity: consumed the moment it's been evaluated, whether the player used it,
+        // ignored it in favour of a normal/safety shot, or fouled on it - never carries over.
+        freeBallAvailable = false;
+        freeBallNomination = null;
+    }
+
+    // ======================================================================
+    // ----- Foul Play/Play-Again Decision (FOUL_PLAY_AGAIN_RULE.md) -----
+    // ======================================================================
+
+    public bool IsAwaitingFoulDecision => awaitingFoulDecision;
+    public int FoulDecisionForPlayerIndex => foulDecisionForPlayerIndex;
+    // The player who committed the foul - only meaningful while IsAwaitingFoulDecision is true,
+    // since currentPlayerIndex is the non-offending decision-maker for that entire window.
+    public int FoulingPlayerIndex => OpponentIndex;
+
+    private void RefreshFoulDecisionPanel()
+    {
+        if (foulDecisionPanel != null)
+            foulDecisionPanel.SetActive(awaitingFoulDecision);
+    }
+
+    // "Play" - take the next shot from the table as it lies (plus placement-in-D if the cue
+    // ball was potted). Called by the human's Play button or the AI's own decision logic.
+    public void ChooseFoulPlay()
+    {
+        if (!awaitingFoulDecision) return;
+        if (BlockedAsHumanInputDuringAiTurn) return;
+
+        if (debugLogging) Debug.Log($"[GMDebug] Player {foulDecisionForPlayerIndex} chooses to PLAY.");
+        awaitingFoulDecision = false;
+        RefreshFoulDecisionPanel();
+        if (foulDecisionCueBallPotted) BeginPlacement();
+        else TryResolvePendingFreeBallCheck();
+    }
+
+    // "Make [opponent] play again" - decline, sending the fouling player back in from the same
+    // position. Reuses PassTurn() to flip currentPlayerIndex back; its Colour/Red reset check is
+    // already a no-op here since the PassTurn call inside EvaluateFoul already applied it if it
+    // was going to (targetState only resets Colour -> Red once per foul, and toggling
+    // currentPlayerIndex a second time doesn't reopen that).
+    public void ChooseFoulPlayAgain()
+    {
+        if (!awaitingFoulDecision) return;
+        if (BlockedAsHumanInputDuringAiTurn) return;
+
+        if (debugLogging) Debug.Log($"[GMDebug] Player {foulDecisionForPlayerIndex} makes Player " +
+                                      $"{FoulingPlayerIndex} play again.");
+        awaitingFoulDecision = false;
+        RefreshFoulDecisionPanel();
+        PassTurn();
+        if (foulDecisionCueBallPotted) BeginPlacement();
+        else TryResolvePendingFreeBallCheck();
+    }
+
+    // FREE_BALL.md: runs the snooker check exactly once, the moment the incoming player's cue ball
+    // position is actually final - either here (no placement was needed) or from ConfirmPlacement
+    // (placement was needed, so this waits for it instead of running against a stale position).
+    // pendingFreeBallCheck is only ever true when EvaluateFoul just flagged it, so this is a no-op on
+    // every other call to ConfirmPlacement (e.g. ordinary frame-start placement).
+    private void TryResolvePendingFreeBallCheck()
+    {
+        if (!pendingFreeBallCheck) return;
+        pendingFreeBallCheck = false;
+        EvaluateFreeBallEligibility();
     }
 }

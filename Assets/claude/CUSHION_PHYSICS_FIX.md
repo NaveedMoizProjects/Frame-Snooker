@@ -1,5 +1,16 @@
 # Cushion Physics Fix
 
+**Status note (September 2026):** re-verified the cushion/jaw colliders while investigating an
+unrelated bug (see `AI_FOUL_LOGIC.md`). `CushionPhysicsMaterial.cs` does not exist anywhere in
+`Assets/Scripts` - this custom-script approach was apparently abandoned or never actually
+landed, contrary to what the rest of this doc describes. Cushion bounce is evidently working
+correctly through Unity's built-in collision response alone (confirmed via many hundreds of
+shots across this project's AI testing, never once flagged as sticking) - almost certainly via
+a properly tuned `PhysicMaterial` (this doc's own step 4), not the script below. All 18
+cushion/jaw `MeshCollider`s across Beginner/Medium/Pro are on the `Cushion` layer, non-trigger,
+enabled, and overlap their visual meshes correctly - the geometry side of this doc still holds,
+only the "how the bounce is computed" section is stale.
+
 ## Symptom
 Ball cushion se takra kar wahin ruk jati thi ("bounce" nahi hoti thi) — instead of
 reflecting off at a mirror angle like a real snooker cushion.
@@ -75,6 +86,36 @@ cushion — as long as step 2 below is done.
    but it will make general rolling feel inconsistent/over-damped. Recommend setting
    `Drag` to `0` (and `AngularDrag` to something small like `0.05`, just to avoid
    infinite numerical spin) on the `Cue` component in the Inspector.
+
+## Follow-up: cushions "don't look realistic" (reported after the physics fix)
+
+The bounce *physics* has been confirmed correct (kinematic cushions, 0.9 bounciness,
+bounceThreshold 0.2 — see the tuning conversation earlier in this project). A separate
+complaint that the sides "don't look realistic" is almost certainly about *appearance/
+feel*, not the bounce direction/energy math — don't re-open the physics fix, investigate
+these instead, in order:
+
+1. **Collider-vs-visual-mesh alignment.** Check whether each cushion's collider actually
+   matches the visible cushion rail mesh (same size/position), via Unity MCP — if the
+   collider is inset from or protrudes past the visible rail edge, the ball will visibly
+   bounce before touching the rail, or clip slightly into it before bouncing. This is the
+   single most common cause of a cushion "not looking real" even when the underlying
+   bounce math is correct.
+2. **Motion smoothness.** With `Rigidbody.Interpolate` not set (see step 5 in the main
+   fix above), fast bounces can look slightly jittery/stepped rather than smooth. Confirm
+   `Interpolate` is actually set on the ball prefabs, not just recommended.
+3. **Bounce angle "feel."** A real cushion isn't a perfectly flat mirror at every point —
+   ball radius vs. cushion nose shape affects the real contact normal slightly near
+   corners/pocket jaws. If bounces specifically near pocket openings look wrong while
+   bounces along straight rail sections look fine, that's a geometry-near-pockets issue,
+   not a general physics issue — narrow down to whether it's happening everywhere or only
+   near specific areas of the table before changing any values.
+4. **Cushion material/visual appearance itself** (color, height, shading) — if none of
+   1–3 explain it, it may genuinely just be a modeling/texturing issue rather than
+   anything physics-related, and should be handled as an art/asset task, not a script fix.
+
+Report which of these (if any) is the actual cause before changing anything — this is a
+different symptom from the original bug and needs its own diagnosis, not a guess.
 
 ## How to verify it's fixed
 1. Play mode → shoot the cue ball straight at a side cushion at low power.

@@ -78,7 +78,7 @@ public class CueBallPlacement : MonoBehaviour
     private void DragTo(Vector3 point)
     {
         point.y = cueBall.transform.position.y; // the ball stays on the cloth
-        cueBall.transform.position = point;
+        MoveBall(point);
     }
 
     private void EndDrag()
@@ -86,12 +86,22 @@ public class CueBallPlacement : MonoBehaviour
         dragging = false;
 
         Vector3 drop = cueBall.transform.position;
-        cueBall.transform.position = gameManager.TryPlaceCueBall(drop) ? drop : gameManager.LastValidPlacement;
+        MoveBall(gameManager.TryPlaceCueBall(drop) ? drop : gameManager.LastValidPlacement);
 
         if (cueCollider != null) cueCollider.enabled = true;
         cueBall.isKinematic = false;
         cueBall.velocity = Vector3.zero;
         cueBall.angularVelocity = Vector3.zero;
+    }
+
+    // Project settings leave Physics.autoSyncTransforms off, so writing only transform.position moves
+    // the visible ball while the physics body stays put. Placement looked correct on screen but the
+    // body kept its old pose, and the moment placement ended and the body went dynamic again it
+    // dragged the ball back out of the D - which read as "placement isn't constrained".
+    private void MoveBall(Vector3 point)
+    {
+        cueBall.position = point;
+        cueBall.transform.position = point;
     }
 
     // Where the pointer meets the plane the ball's centre travels on.

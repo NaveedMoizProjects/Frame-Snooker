@@ -82,8 +82,24 @@ whole point of this model is that they emerge correctly on their own.
 
 - `BallRollingFriction.cs` already computes contact-point slip using linear + angular
   velocity at the table contact point — this is exactly the mechanism that turns the
-  spin applied above into visible follow/screw/curve behavior over time. **No changes
-  needed there.**
+  spin applied above into visible follow/screw/curve behavior over time.
+  **Tuned (September 2026):** `slidingFriction` raised from 0.2 to 0.26 after a user
+  report that screw/follow/side-spin took too long to "grab." This is the single
+  parameter controlling how fast contact-point slip resolves, for every spin direction
+  alike (the model doesn't distinguish them). It's a direct trade-off, not a free fix -
+  measured live (Pro scene, controlled single-ball strikes): raising it speeds up
+  screw/follow/side-spin onset, but the same mechanism also governs how far a plain STUN
+  shot runs on at longer range (a stun only stops dead while the cue ball is still
+  sliding, not yet rolling, at the moment of contact - more friction means it starts
+  rolling sooner, i.e. over a shorter distance). At 0.32 stun was clearly broken at 7
+  units (ran through at -3.3 m/s instead of nearly stopping); 0.26 is a deliberately
+  moderate middle value, chosen by the user with the trade-off explained, not a "correct"
+  physics answer - re-tune further only with the same live A/B method, checking BOTH a
+  close-range spin shot and a long-range stun shot before and after any change.
+  Decoupling the two properly (so stun stays untouched while spin gets its own, higher
+  friction) would need the model to tell deliberate-spin slip apart from plain
+  post-strike slide - not attempted, since the same `contactVel` magnitude currently
+  drives both and there's no cheap signal to separate them.
 - `CushionPhysicsMaterial.cs`'s spin damping on bounce (`spinRetention`) still applies
   normally — side-spin surviving a cushion contact (swerve continuing after a rail) is
   already handled by that existing field, nothing new needed.

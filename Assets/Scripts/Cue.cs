@@ -18,12 +18,20 @@ public class Cue : MonoBehaviour
     [Header("Cue Ball Rigidbody Settings")]
     [SerializeField] private float Mass = 1.0f;
     [SerializeField] private float Drag = 0.5f;
-    [SerializeField] private float AngularDrag = 0.5f;
 
     // ---------------- Strike Control (Inspector Testing) ----------------
     [Header("Strike Control (Inspector Testing)")]
     [Range(0.01f, 15f)]
     [SerializeField] private float forceMultiplier = 1.0f; // scales the final force (live)
+
+    // ---------------- Sound ----------------
+    [Header("Sound")]
+    [Tooltip("Played the moment the cue strikes the cue ball. Optional.")]
+    [SerializeField] private AudioClip cueHitSound;
+    [Tooltip("Random pitch range applied each strike, so repeated hits don't sound identical.")]
+    [SerializeField] private Vector2 pitchRange = new Vector2(0.95f, 1.05f);
+    [Tooltip("Optional: assign an AudioSource to route through (e.g. a mixer group). If left empty, one is added automatically on this GameObject.")]
+    [SerializeField] private AudioSource audioSource;
 
     // ---------------- Spin (SPIN_LOGIC.md) ----------------
     [Header("Spin")]
@@ -41,8 +49,12 @@ public class Cue : MonoBehaviour
     [SerializeField] private LineRenderer aimLineObject;  // object-ball path
     [SerializeField] private float maxDistance = 60f;
     [SerializeField] private float maxNoHitLength = 8f;
-    [SerializeField] private int maxReflectionBounces = 3;      // max number of cushion bounces to predict
-    [SerializeField] private float reflectionEpsilon = 0.02f;  // small
+    // No longer read: GenerateAimPrediction used to bounce the prediction line off cushions up to
+    // this many times, which drew a cushion-reflection prediction that isn't wanted (reflection is
+    // for ball collisions only - see the dBall < dRail branch). Left here rather than deleted so no
+    // scene loses a serialized Inspector value over a behaviour change.
+    [SerializeField] private int maxReflectionBounces = 3;
+    [SerializeField] private float reflectionEpsilon = 0.02f;  // unused, same reason as above
     [SerializeField] private GameObject ghostBallPrefab;
     private GameObject currentGhostBall;
 
@@ -54,6 +66,7 @@ public class Cue : MonoBehaviour
     [SerializeField] private LayerMask ballLayer;
     [SerializeField] private LayerMask tableLayer;
     [SerializeField] private LayerMask pocketLayer;
+    // Unused since cushion/pocket hits no longer bounce the prediction line - see maxReflectionBounces.
     [SerializeField] private bool stopAtPockets = true;
 
     [Tooltip("Read from SphereCollider if <= 0")]
@@ -66,6 +79,7 @@ public class Cue : MonoBehaviour
 
     // reuse buffer
     private readonly List<Vector3> aimPoints = new List<Vector3>(4);
+    private readonly RaycastHit[] castBuffer = new RaycastHit[16];
 
     // debug
     [Header("TEMP DEBUG - delete after fixing")]
@@ -86,7 +100,9 @@ public class Cue : MonoBehaviour
         cueballRigidbody = Cueball.GetComponent<Rigidbody>() ?? Cueball.AddComponent<Rigidbody>();
         cueballRigidbody.mass = Mass;
         cueballRigidbody.drag = Drag;
-        cueballRigidbody.angularDrag = AngularDrag;
+        // angularDrag is deliberately left at the ball prefab's own baked-in value (0.001, same as
+        // every object ball) - this used to be overwritten to 0.05 here, which made the cue ball's
+        // spin decay faster than every other ball's for no gameplay reason found in this file.
 
         if (cueBallRadius <= 0f)
         {
@@ -168,6 +184,68 @@ public class Cue : MonoBehaviour
         return v.sqrMagnitude < 1e-6f ? Vector3.zero : v.normalized;
     }
 
+    // Where the cue is pointing right now, derived purely from the stick's own position. Aim comes
+    // from nowhere else - SnookerAI steers this by moving the stick, exactly like a human drag does,
+    // so there is no second aiming path that could be more accurate than what the player gets.
+    public Vector3 CurrentAimForward => Flat(Cueball.transform.position - cuestickref.transform.position);
+
+    public float CueBallRadius => cueBallRadius;
+
+    // Direction the cue ball deflects to after contact: the component of its approach perpendicular
+    // to the object ball's departure line (equal-mass elastic "throw-off"). Shared with SnookerAI's
+    // position approximation so both use one definition of where the cue ball goes next.
+    public Vector3 CueDirectionAfterContact(Vector3 approachDir, Vector3 objectBallDir)
+        => Flat(approachDir - Vector3.Project(approachDir, objectBallDir));
+
+    // The line-of-sight test behind GenerateAimPrediction's ball/rail casts, exposed so shot
+    // selection asks the same question the aim line answers: is anything between these two points?
+    // ignoreA/ignoreB drop the balls the caller is reasoning about (the target it wants to hit, and
+    // the cue ball when it is being planned into a position it isn't standing in yet).
+    // 'margin' widens the corridor beyond the bare ball radius. Shot selection needs it: a line that
+    // is clear by a hair is not a line the ball can actually be sent down, because the strike's cue
+    // elevation, the cloth and the physics step size all eat into that gap on the way.
+    public bool IsPathClear(Vector3 from, Vector3 to, Rigidbody ignoreA, Rigidbody ignoreB, bool checkCushions, float margin = 0f)
+    {
+        Vector3 delta = to - from;
+        delta.y = 0f;
+        float distance = delta.magnitude;
+        if (distance <= 1e-4f) return true;
+        Vector3 dir = delta / distance;
+
+        float radius = cueBallRadius + Mathf.Max(0f, margin);
+
+        // Start clear of whatever sits at 'from', otherwise the cast begins inside its own collider.
+        float skip = cueBallRadius + 1e-3f;
+        if (distance <= skip) return true;
+        Vector3 origin = from + dir * skip;
+        float span = distance - skip;
+
+        int count = Physics.SphereCastNonAlloc(origin, radius, dir, castBuffer, span, ballLayer, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            Rigidbody rb = castBuffer[i].collider.attachedRigidbody;
+            if (rb == null || rb == ignoreA || rb == ignoreB) continue;
+            return false;
+        }
+
+        return !checkCushions || !Physics.Raycast(origin, dir, span, tableLayer, QueryTriggerInteraction.Ignore);
+    }
+
+    // Stops a predicted roll at the first cushion it would meet, so position guesses can't score a
+    // resting spot that is actually off the table.
+    public Vector3 ClampToCushion(Vector3 from, Vector3 to)
+    {
+        Vector3 delta = to - from;
+        delta.y = 0f;
+        float distance = delta.magnitude;
+        if (distance <= 1e-4f) return to;
+        Vector3 dir = delta / distance;
+
+        return Physics.Raycast(from, dir, out RaycastHit hit, distance, tableLayer, QueryTriggerInteraction.Ignore)
+            ? new Vector3(hit.point.x, to.y, hit.point.z) - dir * cueBallRadius
+            : to;
+    }
+
     private void HidePrediction()
     {
         if (aimLineCue) aimLineCue.positionCount = 0;
@@ -184,7 +262,7 @@ public class Cue : MonoBehaviour
         float tableY = Cueball.transform.position.y;
         Vector3 origin = Cueball.transform.position + Vector3.up * 0.01f;
         // Pure aim: spin only moves where the tip meets the ball, never the launch direction.
-        Vector3 dir = Flat(Cueball.transform.position - cuestickref.transform.position);
+        Vector3 dir = CurrentAimForward;
         if (dir == Vector3.zero) return;
 
         aimPoints.Clear();
@@ -195,17 +273,8 @@ public class Cue : MonoBehaviour
         Vector3 currentOrigin = origin;
         Vector3 currentDir = dir;
         float remainingDistance = maxDistance;
-        int bounces = 0;
 
-        // helper to test if a RaycastHit is a pocket by layer
-        bool IsPocket(RaycastHit h)
-        {
-            if (h.collider == null) return false;
-            int hitLayerMask = 1 << h.collider.gameObject.layer;
-            return (pocketLayer.value & hitLayerMask) != 0;
-        }
-
-        while (remainingDistance > 0f && bounces <= maxReflectionBounces)
+        while (remainingDistance > 0f)
         {
             // 1) check ball along this segment
             RaycastHit ballHit;
@@ -265,7 +334,7 @@ public class Cue : MonoBehaviour
                 // object-ball direction, standard equal-mass elastic collision "throw-off" line).
                 // This is what was missing - previously aimPoints stopped exactly at contact,
                 // so the white line never showed where the cue ball goes after the hit.
-                Vector3 cueDirAfter = Flat(currentDir - Vector3.Project(currentDir, objDir));
+                Vector3 cueDirAfter = CueDirectionAfterContact(currentDir, objDir);
                 if (cueDirAfter != Vector3.zero)
                 {
                     float cueStubLen = Mathf.Max(0.01f, contactStubLength);
@@ -292,35 +361,16 @@ public class Cue : MonoBehaviour
             }
             else if (hasRail)
             {
+                // The reflection prediction is for ball collisions only (see the dBall < dRail branch
+                // above, which already draws the post-contact cue-ball direction) - a cushion or pocket
+                // hit just ends the line here with no bounce. This used to reflect and keep extending
+                // the line off the rail (up to maxReflectionBounces times), which drew a predicted
+                // cushion-bounce path that was never wanted.
                 Vector3 rp = railHit.point;
                 rp.y = tableY;
                 aimPoints.Add(rp);
-
-                // If it's a pocket and we should stop at pockets, stop here.
-                if (stopAtPockets && IsPocket(railHit))
-                {
-                    break;
-                }
-
-                // Compute reflection and continue
-                Vector3 refl = Vector3.Reflect(currentDir, railHit.normal);
-                refl = Flat(refl);
-                if (refl == Vector3.zero)
-                {
-                    // can't continue predictably
-                    break;
-                }
-
-                // Move origin slightly along reflection to avoid immediately hitting the same collider
-                currentOrigin = railHit.point + refl * reflectionEpsilon;
-                currentOrigin.y = origin.y; // keep same height for flattened prediction
-
-                // reduce remaining distance by distance consumed
-                remainingDistance -= (dRail + reflectionEpsilon);
-
-                currentDir = refl;
-                bounces++;
-                continue;
+                if (currentGhostBall != null) currentGhostBall.SetActive(false);
+                break;
             }
             else
             {
@@ -358,7 +408,7 @@ public class Cue : MonoBehaviour
             if (gameManager == null) return;
         }
 
-        Vector3 aimForward = Flat(Cueball.transform.position - cuestickref.transform.position);
+        Vector3 aimForward = CurrentAimForward;
         if (aimForward == Vector3.zero)
         {
             Debug.LogWarning("Cue too close to ball to apply force!");
@@ -377,9 +427,16 @@ public class Cue : MonoBehaviour
 
         Vector2 spin = gameManager.StrikeSpin;
         float maxOffset = cueBallRadius * spinContactOffset;
-        Vector3 contactPoint = cueballRigidbody.worldCenterOfMass - strikeDirection * cueBallRadius
-                             + right * (spin.x * maxOffset)
-                             + Vector3.up * (spin.y * maxOffset);
+        Vector3 lateralOffset = right * (spin.x * maxOffset) + Vector3.up * (spin.y * maxOffset);
+
+        // The tip can only ever touch a point ON the ball's surface - pulling the backward depth
+        // in as the lateral offset grows (instead of always going a full radius back) keeps
+        // contactPoint on the sphere at any spin setting. Summing a fixed radius-back offset with
+        // the lateral one directly (the old code) put the point up to ~16% outside the ball at max
+        // spin, inflating the torque (r x F) far beyond what a real cue tip could ever impart.
+        float depthSq = cueBallRadius * cueBallRadius - lateralOffset.sqrMagnitude;
+        float depth = depthSq > 0f ? Mathf.Sqrt(depthSq) : 0f;
+        Vector3 contactPoint = cueballRigidbody.worldCenterOfMass - strikeDirection * depth + lateralOffset;
 
         float impulse = gameManager.GetStrikeForce() * forceMultiplier;
 
@@ -392,11 +449,34 @@ public class Cue : MonoBehaviour
 
         cueballRigidbody.WakeUp();
         cueballRigidbody.AddForceAtPosition(strikeDirection * impulse, contactPoint, ForceMode.Impulse);
+        PlaySound(cueHitSound);
 
         Debug.Log($"[Cue Strike] Impulse={impulse:F2} | Spin={spin} | Elevation={cueElevationDegrees}deg | Aim={aimForward} | mass={cueballRigidbody.mass}", this);
 
         // clear requests/confirm after applying
         gameManager.ClearStrikeRequest();
         // gameManager.ClearConfirmMode();
+    }
+
+    private void PlaySound(AudioClip clip)
+    {
+        if (clip == null) return;
+        var src = GetAudioSource();
+        src.pitch = Random.Range(pitchRange.x, pitchRange.y);
+        src.PlayOneShot(clip);
+    }
+
+    // Lazily resolves/creates the AudioSource instead of the static PlayClipAtPoint helper, since
+    // PlayClipAtPoint spawns a temporary GameObject with no way to set pitch - and pitch variation
+    // is what keeps repeated strikes from sounding robotic.
+    private AudioSource GetAudioSource()
+    {
+        if (audioSource == null)
+        {
+            audioSource = GetComponent<AudioSource>();
+            if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
+            audioSource.playOnAwake = false;
+        }
+        return audioSource;
     }
 }

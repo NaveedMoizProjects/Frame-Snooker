@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 3805457393544182513}
   - component: {fileID: 2401606313264024003}
   - component: {fileID: 8172987241616221814}
+  - component: {fileID: 1763319330117749442}
   m_Layer: 6
   m_Name: Redball#10
   m_TagString: Untagged
@@ -149,3 +150,15 @@ MonoBehaviour:
   ballType: 1
   useManualSpawnPosition: 0
   manualSpawnPosition: {x: 0, y: 0, z: 0}
+--- !u!114 &1763319330117749442
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5459891449854997441}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7a81449f1337f2409a7221f6597a951, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 

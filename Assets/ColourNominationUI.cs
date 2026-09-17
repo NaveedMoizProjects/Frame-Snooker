@@ -14,8 +14,13 @@ public class ColourNominationUI : MonoBehaviour
     [Tooltip("When true, builds a simple picker on this Canvas at Start if references are empty.")]
     [SerializeField] private bool buildUiAtRuntime = true;
     [Header("Optional manual references")]
+    [Tooltip("The six-colour picker. Shown only while a nomination is owed.")]
     [SerializeField] private GameObject nominationPanel;
+    [Tooltip("Prompt inside the picker. Hidden along with the picker once a colour is chosen.")]
     [SerializeField] private TextMeshProUGUI statusLabel;
+    [Tooltip("Which ball is on, kept on screen through aiming and the strike. Must live OUTSIDE the " +
+             "picker: anything parented under it disappears when the picker collapses.")]
+    [SerializeField] private TextMeshProUGUI ballOnLabel;
     private readonly Dictionary<BallType, Button> colourButtons = new();
     private static readonly BallType[] NominatableColours =
     {
@@ -48,8 +53,30 @@ public class ColourNominationUI : MonoBehaviour
         }
         if (buildUiAtRuntime && nominationPanel == null)
             BuildRuntimeUi();
+        // The ball-on label is built independently of the picker: the scene wires a picker but its
+        // label sits inside it, so without this there is nothing left on screen after a selection.
+        if (ballOnLabel == null)
+            ballOnLabel = BuildBallOnLabel();
+        BindSceneButtons();
         gameManager.OnTargetChanged += HandleTargetChanged;
         Refresh();
+    }
+
+    // The scene's picker already holds six ColourNominateButtons wired to OnColourNominated. Binding
+    // them here gets the selection highlight working and refreshes the labels inside the same click,
+    // so the confirmation appears the instant the player taps rather than a frame later.
+    private void BindSceneButtons()
+    {
+        colourButtons.Clear();
+        if (nominationPanel == null) return;
+
+        foreach (var nominate in nominationPanel.GetComponentsInChildren<ColourNominateButton>(true))
+        {
+            var button = nominate.GetComponent<Button>();
+            if (button == null) continue;
+            colourButtons[nominate.Colour] = button;
+            button.onClick.AddListener(Refresh);
+        }
     }
     void OnDestroy()
     {
@@ -67,8 +94,9 @@ public class ColourNominationUI : MonoBehaviour
     }
     private void Refresh()
     {
-        if (statusLabel != null)
-            statusLabel.text = BuildStatusText();
+        string text = BuildStatusText();
+        if (statusLabel != null) statusLabel.text = text;
+        if (ballOnLabel != null) ballOnLabel.text = text;
         RefreshPanelVisibility();
         RefreshButtonHighlights();
     }
@@ -77,15 +105,19 @@ public class ColourNominationUI : MonoBehaviour
         if (gameManager.CurrentTargetState == GameManager.TargetBallState.Red)
             return "Ball on: Red";
         if (gameManager.NeedsColourNomination)
-            return "Pot a red � now choose your colour";
+            return "Pot a red - now choose your colour";
         if (gameManager.CurrentTargetColour.HasValue)
-            return $"Ball on: {gameManager.CurrentTargetColour.Value}";
+            return $"{gameManager.CurrentTargetColour.Value} selected";
         return "Ball on: Colour";
     }
+    // The picker panel is no longer the way to nominate a colour - the player clicks the actual
+    // ball on the table instead (see ColourBallClickTarget), shown via SelectedColourIndicator on
+    // the Canvas. Kept as a permanently-hidden method (rather than deleting the panel/this call)
+    // so nothing else that references nominationPanel breaks.
     private void RefreshPanelVisibility()
     {
         if (nominationPanel != null)
-            nominationPanel.SetActive(gameManager.NeedsColourNomination);
+            nominationPanel.SetActive(false);
     }
     private void RefreshButtonHighlights()
     {
@@ -107,6 +139,32 @@ public class ColourNominationUI : MonoBehaviour
         }
         return Color.gray;
     }
+    // Sits at the canvas root, deliberately not under the picker, so a selection can collapse the
+    // picker while this stays on screen as the reminder of which ball is on.
+    private TextMeshProUGUI BuildBallOnLabel()
+    {
+        var canvas = GetComponent<Canvas>() ?? GetComponentInParent<Canvas>();
+        if (canvas == null)
+        {
+            Debug.LogError("ColourNominationUI: Attach this to a Canvas (or child of one).", this);
+            return null;
+        }
+
+        var go = new GameObject("BallOnStatus", typeof(RectTransform), typeof(TextMeshProUGUI));
+        go.transform.SetParent(canvas.GetComponent<RectTransform>(), false);
+        var rect = go.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 1f);
+        rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = new Vector2(0f, -20f);
+        rect.sizeDelta = new Vector2(520f, 40f);
+
+        var label = go.GetComponent<TextMeshProUGUI>();
+        label.alignment = TextAlignmentOptions.Center;
+        label.fontSize = 24f;
+        label.color = Color.white;
+        return label;
+    }
     private void BuildRuntimeUi()
     {
         var canvas = GetComponent<Canvas>();
@@ -118,19 +176,6 @@ public class ColourNominationUI : MonoBehaviour
             return;
         }
         var root = canvas.GetComponent<RectTransform>();
-        var statusGo = new GameObject("BallOnStatus", typeof(RectTransform), typeof(TextMeshProUGUI));
-        statusGo.transform.SetParent(root, false);
-        var statusRect = statusGo.GetComponent<RectTransform>();
-        statusRect.anchorMin = new Vector2(0.5f, 1f);
-        statusRect.anchorMax = new Vector2(0.5f, 1f);
-        statusRect.pivot = new Vector2(0.5f, 1f);
-        statusRect.anchoredPosition = new Vector2(0f, -20f);
-        statusRect.sizeDelta = new Vector2(520f, 40f);
-        statusLabel = statusGo.GetComponent<TextMeshProUGUI>();
-        statusLabel.alignment = TextAlignmentOptions.Center;
-        statusLabel.fontSize = 24f;
-        statusLabel.color = Color.white;
-        statusLabel.text = "Ball on: Red";
         nominationPanel = new GameObject("ColourNominationPanel", typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup));
         nominationPanel.transform.SetParent(root, false);
         var panelRect = nominationPanel.GetComponent<RectTransform>();

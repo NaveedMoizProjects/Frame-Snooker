@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 5714638251190152020}
   - component: {fileID: 6650301439910886483}
   - component: {fileID: 221632171522193588}
+  - component: {fileID: 3837927977077246103}
   m_Layer: 6
   m_Name: Brown
   m_TagString: Untagged
@@ -149,3 +150,15 @@ MonoBehaviour:
   ballType: 4
   useManualSpawnPosition: 0
   manualSpawnPosition: {x: 0, y: 0, z: 0}
+--- !u!114 &3837927977077246103
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6192784576878776445}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c7a81449f1337f2409a7221f6597a951, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
