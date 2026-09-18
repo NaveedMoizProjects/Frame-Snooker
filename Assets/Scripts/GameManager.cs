@@ -1,6 +1,16 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+
+// One line of commentary per shot, picked from Player_* or AI_* pools depending on who shot and
+// whether it was potted. Kept as a plain enum here (no new .cs file) since it's only ever used to
+// pick which of the three POT pools to play - see ClassifyShotType/PrepareCommentaryForShot below.
+public enum CommentaryShotType { EasyPot, LongPot, CutPot }
+
+// Which specific foul happened on the last shot, for the foul commentary clips. Set inline inside
+// EvaluateFoul, right alongside the checks that already decide legal vs foul - not a second check.
+public enum FoulReason { None, CueBallFoul, WrongBallFoul, NoBallHitFoul }
 
 public class GameManager : MonoBehaviour
 {
@@ -62,6 +72,68 @@ public class GameManager : MonoBehaviour
     [Header("TEMP DEBUG - delete after fixing")]
     [SerializeField] private bool debugLogging = true;
     private float debugLogTimer2 = 0f;
+
+    [Header("Commentary System")]
+    [Tooltip("Cut angle (degrees, between cue-to-object and object-to-pocket) above which a pot " +
+             "counts as a Difficult Cut for commentary purposes.")]
+    public float commentaryCutAngleThreshold = 35f;
+    [Tooltip("Total shot distance (cue-to-object plus object-to-pocket, world units) above which a " +
+             "pot counts as a Long Pot. Default is roughly 60% of this table's ~17-unit long side.")]
+    public float commentaryLongPotDistance = 10f;
+    [Tooltip("Seconds to wait after the balls settle before the commentary line plays.")]
+    public float commentaryDelay = 0.5f;
+
+    [Header("Commentary Clips - Player")]
+    public AudioClip[] Player_EasyPot;
+    public AudioClip[] Player_LongPot;
+    public AudioClip[] Player_CutPot;
+    public AudioClip[] Player_Miss;
+
+    [Header("Commentary Clips - AI")]
+    public AudioClip[] AI_EasyPot;
+    public AudioClip[] AI_LongPot;
+    public AudioClip[] AI_CutPot;
+    public AudioClip[] AI_Miss;
+
+    [Header("Commentary Clips - Ball Names (shared Player/AI)")]
+    [Tooltip("Plays for whichever ball the cue ball hits first this shot. Turn off below to skip it.")]
+    public bool playBallNameClip = true;
+    public AudioClip Red;
+    public AudioClip Yellow;
+    public AudioClip Green;
+    public AudioClip Brown;
+    public AudioClip Blue;
+    public AudioClip Pink;
+    public AudioClip Black;
+
+    [Header("Commentary Clips - Fouls (shared Player/AI)")]
+    [Tooltip("Cue ball potted.")]
+    public AudioClip CueBallFoul;
+    [Tooltip("Wrong ball hit first (e.g. Red was required but Blue was hit).")]
+    public AudioClip WrongBallFoul;
+    [Tooltip("Cue ball touched no ball at all.")]
+    public AudioClip NoBallHitFoul;
+
+    [Header("Commentary Clips - Extra")]
+    [Tooltip("Plays after a red ball is legally potted (next shot must be a colour).")]
+    public AudioClip AfterRedBall;
+
+    [Tooltip("Optional: AudioSource commentary lines play through. If left empty, one is added " +
+             "automatically on this GameObject.")]
+    [SerializeField] private AudioSource commentaryAudioSource;
+
+    // Computed by PrepareCommentaryForShot at the moment the shot is struck (before anything moves)
+    // and consumed once by PlayCommentaryForFinishedShot once the shot has fully resolved.
+    private Rigidbody pendingCommentaryObjectBall;
+    private CommentaryShotType pendingCommentaryShotType;
+    private bool pendingCommentaryWasAiTurn;
+    private bool pendingCommentaryIsBreakOff;
+    private int shotsTakenThisFrame = 0;
+    private readonly List<Transform> pocketTransforms = new List<Transform>();
+    private readonly Dictionary<AudioClip[], int> lastCommentaryIndex = new Dictionary<AudioClip[], int>();
+    private Coroutine commentaryCoroutine;
+    private FoulReason lastFoulReason = FoulReason.None;
+    public FoulReason LastFoulReason => lastFoulReason;
 
     // state
     private bool nextplay = false;
@@ -200,6 +272,10 @@ public class GameManager : MonoBehaviour
         // doesn't matter - they touch unrelated state.
         OnAllBallsStopped += EvaluateShotResult;
 
+        // Commentary: runs last, after EvaluateFoul/EvaluateShotResult above, so LastShotWasFoul and
+        // PottedThisShot are both fully settled by the time it decides POT vs MISS.
+        OnAllBallsStopped += PlayCommentaryForFinishedShot;
+
         // Phase 5: keep the manually-built nomination panel in sync with game state.
         // This replaces ColourNominationUI entirely - GameManager just toggles the panel
         // GameObject directly, no separate UI script involved.
@@ -216,6 +292,11 @@ public class GameManager : MonoBehaviour
         if (cue == null) cue = FindObjectOfType<Cue>();
         if (cue == null)
             Debug.LogWarning("GameManager: No Cue found in scene - free-ball snooker detection will be skipped.", this);
+
+        // Commentary: same discovery pattern SnookerAI already uses for its own pocket geometry.
+        pocketTransforms.Clear();
+        foreach (var pocket in FindObjectsOfType<PocketTrigger>())
+            pocketTransforms.Add(pocket.transform);
 
         Debug.Log($"GameManager initialized: baseStrikeForce={baseStrikeForce} => GetStrikeForce()={GetStrikeForce()}");
 
@@ -470,6 +551,7 @@ public class GameManager : MonoBehaviour
         spinOffset = Vector2.zero;
         PottedThisShot.Clear();
         firstBallContacted = null; // Phase 4: fresh shot, no contact recorded yet
+        PrepareCommentaryForShot(); // Commentary: classify the shot now, before anything moves
     }
     public void ClearStrikeRequest() => strikeRequested = false;
 
@@ -1147,6 +1229,7 @@ public class GameManager : MonoBehaviour
     private void EvaluateFoul()
     {
         lastShotWasFoul = false;
+        lastFoulReason = FoulReason.None;
         bool cueBallPotted = cueBall != null && PottedThisShot.Contains(cueBall);
         BallType? firstType = GetBallType(firstBallContacted);
 
@@ -1182,11 +1265,13 @@ public class GameManager : MonoBehaviour
             {
                 legal = false;
                 points = Mathf.Max(4, nominatedValue);
+                lastFoulReason = cueBallPotted ? FoulReason.CueBallFoul : FoulReason.NoBallHitFoul;
             }
             else if (firstType != nominated)
             {
                 legal = false;
                 points = Mathf.Max(4, BallValue[firstType.Value]);
+                lastFoulReason = FoulReason.WrongBallFoul;
             }
             else if (PottedThisShot.Count == 1 && GetBallType(PottedThisShot[0]) == nominated)
             {
@@ -1213,11 +1298,13 @@ public class GameManager : MonoBehaviour
             {
                 legal = false;
                 points = Mathf.Max(4, BallValue[BallType.Red]); // 6.5: potting cue ball / hitting nothing
+                lastFoulReason = cueBallPotted ? FoulReason.CueBallFoul : FoulReason.NoBallHitFoul;
             }
             else if (firstType != BallType.Red)
             {
                 legal = false;
                 points = Mathf.Max(4, BallValue[firstType.Value]);
+                lastFoulReason = FoulReason.WrongBallFoul;
             }
             else if (AnyNonRedPottedThisShot())
             {
@@ -1252,11 +1339,13 @@ public class GameManager : MonoBehaviour
             {
                 legal = false;
                 points = Mathf.Max(4, BallValue[target]);
+                lastFoulReason = cueBallPotted ? FoulReason.CueBallFoul : FoulReason.NoBallHitFoul;
             }
             else if (firstType != target)
             {
                 legal = false;
                 points = Mathf.Max(4, BallValue[firstType.Value]);
+                lastFoulReason = FoulReason.WrongBallFoul;
             }
             else if (PottedThisShot.Count == 1 && GetBallType(PottedThisShot[0]) == target)
             {
@@ -1387,5 +1476,241 @@ public class GameManager : MonoBehaviour
         if (!pendingFreeBallCheck) return;
         pendingFreeBallCheck = false;
         EvaluateFreeBallEligibility();
+    }
+
+    // ======================================================================
+    // ----- Commentary System -----
+    // ======================================================================
+
+    // Works out which ball the cue is about to hit and how hard the resulting pot would be, using
+    // the cue's current aim direction - called the instant a strike is actually taken (RequestStrike),
+    // before any ball has moved. Also records whose turn it was and whether this is the break-off.
+    private void PrepareCommentaryForShot()
+    {
+        // A new shot starting always cuts off any commentary queue still playing from the last one.
+        if (commentaryCoroutine != null) StopCoroutine(commentaryCoroutine);
+        if (commentaryAudioSource != null) commentaryAudioSource.Stop();
+
+        pendingCommentaryIsBreakOff = shotsTakenThisFrame == 0;
+        shotsTakenThisFrame++;
+        pendingCommentaryWasAiTurn = IsAiTurn;
+        pendingCommentaryObjectBall = null;
+
+        if (cue == null || cueBall == null) return;
+
+        Rigidbody objectBall = FindLikelyObjectBall(out Vector3 ghostContactPoint);
+        if (objectBall == null) return; // aim doesn't line up with any ball - stays a plain Miss if it misses
+
+        pendingCommentaryObjectBall = objectBall;
+        pendingCommentaryShotType = ClassifyShotType(objectBall, ghostContactPoint);
+    }
+
+    // Finds the first ball the cue ball's current aim direction would actually contact, using the
+    // same ghost-ball geometry the aim-prediction line already draws (see Cue.cs), done here with
+    // plain vector math instead of a physics raycast so GameManager doesn't need Cue's private
+    // layer masks. Outputs the ghost ball's centre at the moment of contact, needed to work out
+    // which way the object ball goes afterwards.
+    private Rigidbody FindLikelyObjectBall(out Vector3 ghostContactPoint)
+    {
+        ghostContactPoint = Vector3.zero;
+        Vector3 origin = cueBall.transform.position;
+        Vector3 aimDir = cue.CurrentAimForward.normalized;
+        float cueRadius = RadiusOf(cueBall);
+
+        Rigidbody bestBall = null;
+        float bestContactDist = float.PositiveInfinity;
+
+        foreach (var ball in balls)
+        {
+            if (ball == null || ball == cueBall || !ball.gameObject.activeInHierarchy) continue;
+
+            Vector3 toBall = ball.transform.position - origin;
+            float alongRay = Vector3.Dot(toBall, aimDir);
+            if (alongRay <= 0f) continue; // behind the cue ball - can't be the first thing it hits
+
+            Vector3 closestPoint = origin + aimDir * alongRay;
+            float perpDist = Vector3.Distance(closestPoint, ball.transform.position);
+            float combinedRadius = cueRadius + RadiusOf(ball);
+            if (perpDist >= combinedRadius) continue; // aim line misses this ball entirely
+
+            float contactDist = alongRay - Mathf.Sqrt(combinedRadius * combinedRadius - perpDist * perpDist);
+            if (contactDist < bestContactDist)
+            {
+                bestContactDist = contactDist;
+                bestBall = ball;
+                ghostContactPoint = origin + aimDir * contactDist;
+            }
+        }
+
+        return bestBall;
+    }
+
+    // Difficult cut first, then Long, then Easy (SHOT_COMMENTARY priority rule). Cut angle is the
+    // angle between (cue ball -> object ball) and (object ball -> pocket); distance is cue-to-object
+    // plus object-to-pocket. The pocket used is whichever one best matches the direction the object
+    // ball actually travels off this contact (ghost-ball centre -> object ball centre), not just the
+    // raw aim direction, so a thin cut still picks a sensible pocket.
+    private CommentaryShotType ClassifyShotType(Rigidbody objectBall, Vector3 ghostContactPoint)
+    {
+        Vector3 origin = cueBall.transform.position;
+        Vector3 objectPos = objectBall.transform.position;
+        Vector3 travelDir = (objectPos - ghostContactPoint).normalized;
+
+        Transform bestPocket = null;
+        float bestAngleToPocket = float.PositiveInfinity;
+        Vector3 bestObjectToPocket = Vector3.zero;
+        foreach (var pocket in pocketTransforms)
+        {
+            if (pocket == null) continue;
+            Vector3 objectToPocket = pocket.position - objectPos;
+            float angle = Vector3.Angle(travelDir, objectToPocket);
+            if (angle < bestAngleToPocket)
+            {
+                bestAngleToPocket = angle;
+                bestPocket = pocket;
+                bestObjectToPocket = objectToPocket;
+            }
+        }
+        if (bestPocket == null) return CommentaryShotType.EasyPot; // no pockets found - safe fallback
+
+        float cutAngle = Vector3.Angle(objectPos - origin, bestObjectToPocket);
+        float totalDistance = Vector3.Distance(origin, objectPos) + bestObjectToPocket.magnitude;
+
+        if (cutAngle > commentaryCutAngleThreshold) return CommentaryShotType.CutPot;
+        if (totalDistance > commentaryLongPotDistance) return CommentaryShotType.LongPot;
+        return CommentaryShotType.EasyPot;
+    }
+
+    // Runs once per shot, after EvaluateFoul/EvaluateShotResult above (so LastShotWasFoul/LastFoulReason/
+    // PottedThisShot are all final). Builds the ordered clip queue for what just happened and starts it
+    // playing. Skips the break-off shot and does nothing while the game is paused (Time.timeScale == 0).
+    private void PlayCommentaryForFinishedShot()
+    {
+        if (pendingCommentaryIsBreakOff || Time.timeScale <= 0f)
+        {
+            pendingCommentaryObjectBall = null;
+            return;
+        }
+
+        List<AudioClip> queue = BuildCommentaryQueue();
+        pendingCommentaryObjectBall = null; // consumed - this shot's result can't be reused for the next one
+
+        commentaryCoroutine = StartCoroutine(PlayCommentaryQueue(queue));
+    }
+
+    // Decides exactly which clips play for the shot that just finished, in order. A foul plays only
+    // its own single clip (CueBallFoul > WrongBallFoul > NoBallHitFoul priority, already reflected in
+    // lastFoulReason by EvaluateFoul). Otherwise: ball-name clip of whatever the cue ball hit first
+    // (existing firstBallContacted/BallIdentity), then the existing pot/miss pool for this shot type,
+    // then AfterRedBall if a red was legally potted this shot.
+    private List<AudioClip> BuildCommentaryQueue()
+    {
+        var queue = new List<AudioClip>();
+
+        if (lastShotWasFoul)
+        {
+            AudioClip foulClip = null;
+            if (lastFoulReason == FoulReason.CueBallFoul) foulClip = CueBallFoul;
+            else if (lastFoulReason == FoulReason.WrongBallFoul) foulClip = WrongBallFoul;
+            else if (lastFoulReason == FoulReason.NoBallHitFoul) foulClip = NoBallHitFoul;
+            if (foulClip != null) queue.Add(foulClip);
+            return queue;
+        }
+
+        if (playBallNameClip)
+        {
+            AudioClip nameClip = BallNameClip(GetBallType(firstBallContacted));
+            if (nameClip != null) queue.Add(nameClip);
+        }
+
+        bool potted = pendingCommentaryObjectBall != null && PottedThisShot.Contains(pendingCommentaryObjectBall);
+        AudioClip[] pool;
+        if (potted)
+        {
+            switch (pendingCommentaryShotType)
+            {
+                case CommentaryShotType.LongPot: pool = pendingCommentaryWasAiTurn ? AI_LongPot : Player_LongPot; break;
+                case CommentaryShotType.CutPot: pool = pendingCommentaryWasAiTurn ? AI_CutPot : Player_CutPot; break;
+                default: pool = pendingCommentaryWasAiTurn ? AI_EasyPot : Player_EasyPot; break;
+            }
+        }
+        else
+        {
+            pool = pendingCommentaryWasAiTurn ? AI_Miss : Player_Miss;
+        }
+        if (pool != null && pool.Length > 0)
+        {
+            AudioClip picked = pool[PickNonRepeatingCommentaryIndex(pool)];
+            if (picked != null) queue.Add(picked); // an unfilled slot in the array - skip quietly
+        }
+
+        bool redLegallyPotted = PottedThisShot.Exists(b => GetBallType(b) == BallType.Red);
+        if (redLegallyPotted && AfterRedBall != null) queue.Add(AfterRedBall);
+
+        return queue;
+    }
+
+    // Maps a ball colour to its name clip (Change 2). Cue has no name clip, so it simply isn't in
+    // this list - null falls through and gets skipped in BuildCommentaryQueue.
+    private AudioClip BallNameClip(BallType? type)
+    {
+        if (!type.HasValue) return null;
+        switch (type.Value)
+        {
+            case BallType.Red: return Red;
+            case BallType.Yellow: return Yellow;
+            case BallType.Green: return Green;
+            case BallType.Brown: return Brown;
+            case BallType.Blue: return Blue;
+            case BallType.Pink: return Pink;
+            case BallType.Black: return Black;
+            default: return null;
+        }
+    }
+
+    // Plays a queue of clips back to back, waiting for each one to finish before starting the next so
+    // they never overlap. commentaryDelay still applies once, before the first clip. An empty queue
+    // (e.g. every relevant slot was left blank) does nothing - no errors.
+    private IEnumerator PlayCommentaryQueue(List<AudioClip> queue)
+    {
+        if (queue.Count == 0) yield break;
+        yield return new WaitForSeconds(commentaryDelay);
+
+        var source = GetCommentaryAudioSource();
+        foreach (var clip in queue)
+        {
+            if (clip == null) continue; // belt-and-braces - skip an empty slot quietly, no errors
+            source.Stop(); // cut whatever's still playing before starting the next line
+            source.PlayOneShot(clip);
+            yield return new WaitForSeconds(clip.length);
+        }
+    }
+
+    // Random index into pool, excluding whichever index played last time from THIS SAME pool array -
+    // tracked per-pool so the 8 pools never influence each other. Same trick PocketTrigger uses for
+    // picking pot VFX.
+    private int PickNonRepeatingCommentaryIndex(AudioClip[] pool)
+    {
+        if (pool.Length == 1) { lastCommentaryIndex[pool] = 0; return 0; }
+
+        lastCommentaryIndex.TryGetValue(pool, out int last);
+        int index;
+        do { index = UnityEngine.Random.Range(0, pool.Length); }
+        while (index == last);
+
+        lastCommentaryIndex[pool] = index;
+        return index;
+    }
+
+    // Lazily resolves/creates the dedicated commentary AudioSource, same pattern PocketTrigger uses
+    // for its own pot-sound source.
+    private AudioSource GetCommentaryAudioSource()
+    {
+        if (commentaryAudioSource == null)
+        {
+            commentaryAudioSource = gameObject.AddComponent<AudioSource>();
+            commentaryAudioSource.playOnAwake = false;
+        }
+        return commentaryAudioSource;
     }
 }
