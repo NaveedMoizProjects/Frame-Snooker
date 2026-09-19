@@ -82,6 +82,9 @@ public class GameManager : MonoBehaviour
     public float commentaryLongPotDistance = 10f;
     [Tooltip("Seconds to wait after the balls settle before the commentary line plays.")]
     public float commentaryDelay = 0.5f;
+    [Tooltip("Safety ceiling: if the commentary queue is somehow still playing after this many " +
+             "seconds, it is force-stopped so the next shot can never be blocked forever.")]
+    public float commentaryTimeoutSeconds = 15f;
 
     [Header("Commentary Clips - Player")]
     public AudioClip[] Player_EasyPot;
@@ -123,17 +126,28 @@ public class GameManager : MonoBehaviour
     [SerializeField] private AudioSource commentaryAudioSource;
 
     // Computed by PrepareCommentaryForShot at the moment the shot is struck (before anything moves)
-    // and consumed once by PlayCommentaryForFinishedShot once the shot has fully resolved.
+    // and consumed once by PlayShotCommentary once the shot has fully resolved.
     private Rigidbody pendingCommentaryObjectBall;
     private CommentaryShotType pendingCommentaryShotType;
     private bool pendingCommentaryWasAiTurn;
     private bool pendingCommentaryIsBreakOff;
     private int shotsTakenThisFrame = 0;
+    // Set by PlayCommentaryForFinishedShot (OnAllBallsStopped) once the shot's foul/pot/miss result is
+    // final - the ball-name half of PlayShotCommentary, already running since the shot was struck,
+    // waits on this before it can work out and play the result clip.
+    private bool shotHasResolved = false;
     private readonly List<Transform> pocketTransforms = new List<Transform>();
     private readonly Dictionary<AudioClip[], int> lastCommentaryIndex = new Dictionary<AudioClip[], int>();
     private Coroutine commentaryCoroutine;
     private FoulReason lastFoulReason = FoulReason.None;
     public FoulReason LastFoulReason => lastFoulReason;
+
+    // True for the whole span of PlayShotCommentary - from the moment the shot is struck (its live
+    // ball-name clip) through to its last result clip finishing (or the safety timeout firing). Read
+    // by IsAimFrozen/ConfirmButtonPressed/RequestStrike/SnookerAI so the next shot waits for it,
+    // instead of cutting the commentary off.
+    private bool isCommentaryPlaying = false;
+    public bool IsCommentaryPlaying => isCommentaryPlaying;
 
     // state
     private bool nextplay = false;
@@ -449,11 +463,12 @@ public class GameManager : MonoBehaviour
     // Blocks Confirm/Strike/spin/ball-click-targeting - anything that could commit to or start a shot.
     public bool IsInputLocked => inputLocked || awaitingPlacement || awaitingFoulDecision;
     // Narrower than IsInputLocked: only the cases where the cue itself should stop moving entirely
-    // (post-Confirm, and ball-in-hand). A pending foul decision does NOT belong here - the player
-    // still needs to freely look around the table (via the aim-follow camera) to judge the position
-    // before choosing Play or Play Again; only actually taking a shot is blocked during that choice,
-    // which ConfirmButtonPressed/RequestStrike already refuse on their own regardless of this.
-    public bool IsAimFrozen => inputLocked || awaitingPlacement;
+    // (post-Confirm, ball-in-hand, and commentary still playing for the last shot). A pending foul
+    // decision does NOT belong here - the player still needs to freely look around the table (via the
+    // aim-follow camera) to judge the position before choosing Play or Play Again; only actually
+    // taking a shot is blocked during that choice, which ConfirmButtonPressed/RequestStrike already
+    // refuse on their own regardless of this.
+    public bool IsAimFrozen => inputLocked || awaitingPlacement || isCommentaryPlaying;
 
     // Called by the single on-screen button.
     // First press enters Confirm mode (locks input). Second press requests the strike.
@@ -474,6 +489,14 @@ public class GameManager : MonoBehaviour
         if (!nextplay)
         {
             Debug.Log("Cannot confirm while balls are moving.");
+            return;
+        }
+
+        // The commentary for the shot that just finished is still playing - hold the next shot back
+        // until it's done, instead of letting Confirm through and then silently rejecting the strike.
+        if (isCommentaryPlaying)
+        {
+            Debug.Log("Cannot confirm: commentary for the last shot is still playing.");
             return;
         }
 
@@ -532,6 +555,10 @@ public class GameManager : MonoBehaviour
     {
         if (frameOver || awaitingPlacement || awaitingFoulDecision) return;
         if (BlockedAsHumanInputDuringAiTurn) return;
+        // Belt-and-braces: ConfirmButtonPressed already refuses to enter confirm mode while
+        // commentary is playing, so this should be unreachable in normal play - kept here in case
+        // anything else ever calls RequestStrike directly.
+        if (isCommentaryPlaying) return;
 
         // Requesting a strike only makes sense once Confirm has actually locked the shot in - Cue.cs
         // only ever fires off BOTH confirmMode and strikeRequested being true together. Setting this
@@ -800,13 +827,24 @@ public class GameManager : MonoBehaviour
 
     public enum TargetBallState { Red, Colour }
 
+    // Which part of the frame we're in, once reds start being potted. Reds = normal reds-phase play
+    // (pot a red, nominate and pot any colour, respot, repeat). ColourAfterLastRed = the one shot
+    // right after the last red goes down legally - same as a normal red's colour, freely nominated
+    // and respotted, just with no reds left to go back to. ColoursInOrder = the fixed Yellow-to-Black
+    // sequence, once that one shot is over. THE single source of truth for which phase we're in -
+    // every other part of the game (nomination, AdvanceColourSequence, the AI) reads it via
+    // NeedsColourNomination/CurrentTargetColour rather than guessing from the reds count.
+    private enum ColourPhase { Reds, ColourAfterLastRed, ColoursInOrder }
+    private ColourPhase colourPhase = ColourPhase.Reds;
+
     [Header("Phase 3 - Colour Logic & Scoring")]
     [Tooltip("Starts on Red per 5.1 (assumes reds remain on table at frame start).")]
     [SerializeField] private TargetBallState targetState = TargetBallState.Red;
 
-    // Set by the nomination buttons (OnColourNominated, via ColourNominateButton). Only
-    // meaningful while targetState == Colour AND reds remain on table - once reds run out
-    // the sequence below drives currentTargetColour automatically, no nomination needed.
+    // Set by the nomination buttons (OnColourNominated, via ColourNominateButton). Only meaningful
+    // while targetState == Colour and we're not yet locked into the fixed order (Reds phase, or the
+    // one free colour right after the last red) - once the fixed order starts, AdvanceColourSequence
+    // drives currentTargetColour automatically, no nomination needed.
     private BallType? currentTargetColour = null;
 
     [Header("Phase 5 - Colour Nomination Panel (manual - no ColourNominationUI script)")]
@@ -817,10 +855,11 @@ public class GameManager : MonoBehaviour
     public TargetBallState CurrentTargetState => targetState;
     public BallType? CurrentTargetColour => currentTargetColour;
 
-    // True exactly when the UI should be showing the colour-nomination picker and
-    // blocking Confirm until the player taps one.
+    // True exactly when the UI should be showing the colour-nomination picker and blocking Confirm
+    // until the player taps one - reds phase, or the one free colour right after the last red. Once
+    // the fixed order has started there's nothing to nominate any more.
     public bool NeedsColourNomination =>
-        targetState == TargetBallState.Colour && currentTargetColour == null && RedsRemainingOnTable() > 0;
+        targetState == TargetBallState.Colour && currentTargetColour == null && colourPhase != ColourPhase.ColoursInOrder;
 
     // 5.2 Points table.
     public static readonly Dictionary<BallType, int> BallValue = new()
@@ -840,6 +879,20 @@ public class GameManager : MonoBehaviour
         BallType.Yellow, BallType.Green, BallType.Brown, BallType.Blue, BallType.Pink, BallType.Black
     };
     private int colourSequenceIndex = -1; // -1 = not yet in colour-sequence phase
+
+    // True if a ball of this colour is still active on the table right now. Used by
+    // AdvanceColourSequence to skip past a colour that's already missing (illegally potted earlier
+    // and never respawned) instead of leaving the game asking for a ball that no longer exists.
+    private bool IsColourOnTable(BallType type)
+    {
+        foreach (var ball in balls)
+        {
+            if (ball == null || !ball.gameObject.activeInHierarchy) continue;
+            var id = ball.GetComponent<BallIdentity>();
+            if (id != null && id.Type == type) return true;
+        }
+        return false;
+    }
 
     // ----- Scoring (minimal 2-player version - Phase 4 owns turn-switching-on-foul) -----
     [Header("Phase 3 - Scoring")]
@@ -877,9 +930,9 @@ public class GameManager : MonoBehaviour
             Debug.LogWarning($"[GMDebug] Ignoring nomination of {chosen} - not currently in Colour state.");
             return;
         }
-        if (RedsRemainingOnTable() == 0)
+        if (colourPhase == ColourPhase.ColoursInOrder)
         {
-            Debug.LogWarning("[GMDebug] Ignoring nomination - reds are gone, colour order is fixed now.");
+            Debug.LogWarning("[GMDebug] Ignoring nomination - colour order is fixed now.");
             return;
         }
         if (chosen == BallType.Red || chosen == BallType.Cue)
@@ -920,7 +973,20 @@ public class GameManager : MonoBehaviour
     // double-count on top of EvaluateFoul's NoFoul()/Foul() results.
     private void EvaluateShotResult()
     {
-        if (PottedThisShot.Count == 0) return; // nothing potted this shot - a miss, Phase 4's job
+        if (PottedThisShot.Count == 0)
+        {
+            // A total miss during the one free colour right after the last red still ends that shot -
+            // pot, miss or foul all move on to the fixed order the same way (a legal pot does this
+            // itself, further down, via ResolveColourPot - this only catches the "nothing potted" case,
+            // which would otherwise be missed entirely by the early return below).
+            if (colourPhase == ColourPhase.ColourAfterLastRed)
+            {
+                colourPhase = ColourPhase.ColoursInOrder;
+                AdvanceColourSequence();
+                OnTargetChanged?.Invoke(targetState, currentTargetColour);
+            }
+            return; // nothing potted this shot - a miss, Phase 4's job
+        }
 
         foreach (var potted in PottedThisShot)
         {
@@ -936,11 +1002,10 @@ public class GameManager : MonoBehaviour
 
             // FREE_BALL.md: a LEGALLY potted free-ball nomination is treated as whatever it stood in
             // for - a red while reds remained (flip to Colour, nomination needed next, exactly like a
-            // real red pot), or the real next-in-sequence colour once they're gone (respot/advance via
-            // ResolveColourPot, reused as-is since RedsRemainingOnTable() is guaranteed 0 here so it
-            // always takes that method's permanent-removal/advance branch, never its respot branch).
-            // Only the ball actually nominated gets this - anything else potted the same shot (or a
-            // fouled free-ball attempt) resolves through the normal branches below untouched.
+            // real red pot), or handed to ResolveColourPot otherwise, which itself now works out
+            // whether that means a respot (still mid-order) or a permanent removal (fixed order) from
+            // colourPhase. Only the ball actually nominated gets this - anything else potted the same
+            // shot (or a fouled free-ball attempt) resolves through the normal branches below untouched.
             bool isFreeBallSubstitute = !lastShotWasFoul && lastShotFreeBallNomination.HasValue
                                          && identity.Type == lastShotFreeBallNomination.Value;
             if (isFreeBallSubstitute)
@@ -978,29 +1043,35 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        // Whatever removed the last red - a clean pot (handled above, but only sets
-        // currentTargetColour to null, "needs nominating or auto-set") or one dropping
-        // incidentally during a foul (the branch above skips it entirely, per the real rule
-        // that a foul keeps the incoming player on Red while reds remain) - once none are
-        // left there is nothing further to be "on Red" for, and the fixed colour sequence
-        // must actually start. AdvanceColourSequence seeds colourSequenceIndex from its
-        // "not started" -1 to 0 (Yellow) the first time this fires; without it,
-        // colourSequenceIndex stayed at -1 until the FIRST colour pot incremented it to 0,
-        // re-targeting the colour that pot had just potted (now off the table) instead of
-        // advancing to the next one - CollectLegalTargets/a human alike could then never
-        // legally hit anything again, since the "on" ball no longer existed.
-        if (RedsRemainingOnTable() == 0 && colourSequenceIndex < 0)
+        // Whatever removed the last red - once none are left there is nothing further to be "on Red"
+        // for. A LEGAL last red earns the same player one more free colour of their choice, exactly
+        // like any other red (the Red branch above already set targetState/currentTargetColour for
+        // that). A last red potted as part of a FOUL skips that free colour entirely - straight to
+        // the fixed order at Yellow, per the real rule that a foul gets no reward.
+        if (RedsRemainingOnTable() == 0 && colourPhase == ColourPhase.Reds)
         {
-            targetState = TargetBallState.Colour;
-            AdvanceColourSequence();
+            if (lastShotWasFoul)
+            {
+                colourPhase = ColourPhase.ColoursInOrder;
+                AdvanceColourSequence();
+            }
+            else
+            {
+                colourPhase = ColourPhase.ColourAfterLastRed;
+            }
             OnTargetChanged?.Invoke(targetState, currentTargetColour);
         }
     }
 
-    // 5.3 Respawn logic (physical placement only - scoring now lives in EvaluateFoul).
+    // 5.3 Respawn logic (physical placement only - scoring now lives in EvaluateFoul). Respots
+    // whenever we haven't locked into the fixed order yet - that covers the normal reds phase AND the
+    // one free colour right after the last red (including the same shot that pots the last red
+    // itself, since colourPhase hasn't flipped to ColourAfterLastRed yet at that exact point - it's
+    // still "Reds" there, which also respots). Only once colourPhase is ColoursInOrder does a potted
+    // colour stay down for good.
     private void ResolveColourPot(BallIdentity identity, Rigidbody colourBall)
     {
-        if (RedsRemainingOnTable() > 0)
+        if (colourPhase != ColourPhase.ColoursInOrder)
         {
             // [Assumed, polish item] Spot-conflict rule (real snooker: nearest available spot
             // up the table if occupied) is not handled yet - straight respot to SpawnPosition
@@ -1008,36 +1079,61 @@ public class GameManager : MonoBehaviour
             TeleportBall(colourBall, identity.SpawnPosition);
             colourBall.gameObject.SetActive(true);
 
-            targetState = TargetBallState.Red;
-            currentTargetColour = null;
-
-            if (debugLogging) Debug.Log($"[GMDebug] {identity.Type} respawned to spot - back on Red.");
+            if (colourPhase == ColourPhase.ColourAfterLastRed)
+            {
+                // That free colour is dealt with now - pot, foul, whichever ball it actually was -
+                // the fixed order starts at Yellow either way. Who plays next (same player on a legal
+                // pot, opponent on a foul/miss) is already decided separately by EvaluateFoul/PassTurn.
+                colourPhase = ColourPhase.ColoursInOrder;
+                AdvanceColourSequence();
+            }
+            else
+            {
+                targetState = TargetBallState.Red;
+                currentTargetColour = null;
+                if (debugLogging) Debug.Log($"[GMDebug] {identity.Type} respawned to spot - back on Red.");
+            }
         }
         else
         {
-            // Reds are gone - this colour stays off permanently, sequence advances.
-            // (Ball is already deactivated/pooled by OnBallPotted's Phase 2 pipeline.)
-            AdvanceColourSequence();
+            // Fixed order: this colour stays off permanently, but the ball on only actually moves on
+            // if this was a LEGAL pot of the ball that was actually required (see AdvanceColourSequence's
+            // own identity check too - both guards are needed, since a shot can foul on wrong-first-contact
+            // even while the correct colour still ends up potted). Any other outcome (a foul, or some
+            // other colour dropping) leaves the ball on exactly where it was - the potted ball itself is
+            // already deactivated/pooled by OnBallPotted.
+            if (!lastShotWasFoul) AdvanceColourSequence(identity.Type);
         }
 
         OnTargetChanged?.Invoke(targetState, currentTargetColour);
     }
 
-    private void AdvanceColourSequence()
+    // THE single place that decides which colour is required next, once all reds are gone - every
+    // other part of the game (AI target selection, the foul check, the UI) reads CurrentTargetColour,
+    // and this is the only place allowed to change it once the fixed sequence has started. Call with
+    // no argument to start the sequence fresh (the instant the last red disappears); call with the
+    // ball that was just potted to try to move past it - if that ball wasn't actually the one
+    // required, the ball on simply doesn't move. Skips over any colour that's already missing from
+    // the table (potted illegally earlier and never respawned) instead of getting stuck asking for it.
+    private void AdvanceColourSequence(BallType? justLegallyPotted = null)
     {
-        colourSequenceIndex++;
-        targetState = TargetBallState.Colour;
+        if (justLegallyPotted.HasValue && justLegallyPotted.Value != currentTargetColour) return;
 
-        if (colourSequenceIndex < ColourSequence.Length)
+        do
         {
+            colourSequenceIndex++;
+            if (colourSequenceIndex >= ColourSequence.Length)
+            {
+                currentTargetColour = null;
+                EndFrame();
+                return;
+            }
             currentTargetColour = ColourSequence[colourSequenceIndex];
-            if (debugLogging) Debug.Log($"[GMDebug] Colour sequence advanced - next up: {currentTargetColour}");
         }
-        else
-        {
-            currentTargetColour = null;
-            EndFrame();
-        }
+        while (!IsColourOnTable(currentTargetColour.Value));
+
+        targetState = TargetBallState.Colour;
+        if (debugLogging) Debug.Log($"[GMDebug] Colour sequence advanced - next up: {currentTargetColour}");
     }
 
     // The black has gone down off the end of the colour sequence - the frame is over.
@@ -1485,24 +1581,36 @@ public class GameManager : MonoBehaviour
     // Works out which ball the cue is about to hit and how hard the resulting pot would be, using
     // the cue's current aim direction - called the instant a strike is actually taken (RequestStrike),
     // before any ball has moved. Also records whose turn it was and whether this is the break-off.
+    // Then starts the shot's commentary running live, straight away - see PlayShotCommentary.
     private void PrepareCommentaryForShot()
     {
-        // A new shot starting always cuts off any commentary queue still playing from the last one.
+        // Safety fallback only: RequestStrike/ConfirmButtonPressed/MyTurnToAct all now wait for
+        // IsCommentaryPlaying, so a new shot should never actually reach here while commentary is
+        // still going. Kept in case some other path ever does, so two shots' commentary can't overlap.
         if (commentaryCoroutine != null) StopCoroutine(commentaryCoroutine);
         if (commentaryAudioSource != null) commentaryAudioSource.Stop();
+        isCommentaryPlaying = false;
+        shotHasResolved = false;
 
         pendingCommentaryIsBreakOff = shotsTakenThisFrame == 0;
         shotsTakenThisFrame++;
         pendingCommentaryWasAiTurn = IsAiTurn;
         pendingCommentaryObjectBall = null;
 
-        if (cue == null || cueBall == null) return;
+        if (cue != null && cueBall != null)
+        {
+            Rigidbody objectBall = FindLikelyObjectBall(out Vector3 ghostContactPoint);
+            if (objectBall != null) // aim doesn't line up with any ball - stays a plain Miss if it misses
+            {
+                pendingCommentaryObjectBall = objectBall;
+                pendingCommentaryShotType = ClassifyShotType(objectBall, ghostContactPoint);
+            }
+        }
 
-        Rigidbody objectBall = FindLikelyObjectBall(out Vector3 ghostContactPoint);
-        if (objectBall == null) return; // aim doesn't line up with any ball - stays a plain Miss if it misses
+        if (pendingCommentaryIsBreakOff || Time.timeScale <= 0f) return; // no commentary at all for this shot
 
-        pendingCommentaryObjectBall = objectBall;
-        pendingCommentaryShotType = ClassifyShotType(objectBall, ghostContactPoint);
+        isCommentaryPlaying = true;
+        commentaryCoroutine = StartCoroutine(PlayShotCommentary());
     }
 
     // Finds the first ball the cue ball's current aim direction would actually contact, using the
@@ -1582,27 +1690,19 @@ public class GameManager : MonoBehaviour
     }
 
     // Runs once per shot, after EvaluateFoul/EvaluateShotResult above (so LastShotWasFoul/LastFoulReason/
-    // PottedThisShot are all final). Builds the ordered clip queue for what just happened and starts it
-    // playing. Skips the break-off shot and does nothing while the game is paused (Time.timeScale == 0).
+    // PottedThisShot are all final). Just flips a flag - PlayShotCommentary has been running live since
+    // the shot was struck and is the one actually waiting on this, so the result plays the instant it's
+    // known instead of only once the whole shot has visibly finished.
     private void PlayCommentaryForFinishedShot()
     {
-        if (pendingCommentaryIsBreakOff || Time.timeScale <= 0f)
-        {
-            pendingCommentaryObjectBall = null;
-            return;
-        }
-
-        List<AudioClip> queue = BuildCommentaryQueue();
-        pendingCommentaryObjectBall = null; // consumed - this shot's result can't be reused for the next one
-
-        commentaryCoroutine = StartCoroutine(PlayCommentaryQueue(queue));
+        shotHasResolved = true;
     }
 
-    // Decides exactly which clips play for the shot that just finished, in order. A foul plays only
-    // its own single clip (CueBallFoul > WrongBallFoul > NoBallHitFoul priority, already reflected in
-    // lastFoulReason by EvaluateFoul). Otherwise: ball-name clip of whatever the cue ball hit first
-    // (existing firstBallContacted/BallIdentity), then the existing pot/miss pool for this shot type,
-    // then AfterRedBall if a red was legally potted this shot.
+    // Decides which result clips play once the shot is known to have resolved, in order. A foul plays
+    // only its own single clip (CueBallFoul > WrongBallFoul > NoBallHitFoul priority, already reflected
+    // in lastFoulReason by EvaluateFoul). Otherwise: the pot/miss pool for this shot type, then
+    // AfterRedBall if a red was legally potted. The ball-name clip isn't here any more - it already
+    // played live, the instant the shot was struck (see PlayShotCommentary).
     private List<AudioClip> BuildCommentaryQueue()
     {
         var queue = new List<AudioClip>();
@@ -1615,12 +1715,6 @@ public class GameManager : MonoBehaviour
             else if (lastFoulReason == FoulReason.NoBallHitFoul) foulClip = NoBallHitFoul;
             if (foulClip != null) queue.Add(foulClip);
             return queue;
-        }
-
-        if (playBallNameClip)
-        {
-            AudioClip nameClip = BallNameClip(GetBallType(firstBallContacted));
-            if (nameClip != null) queue.Add(nameClip);
         }
 
         bool potted = pendingCommentaryObjectBall != null && PottedThisShot.Contains(pendingCommentaryObjectBall);
@@ -1668,22 +1762,56 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    // Plays a queue of clips back to back, waiting for each one to finish before starting the next so
-    // they never overlap. commentaryDelay still applies once, before the first clip. An empty queue
-    // (e.g. every relevant slot was left blank) does nothing - no errors.
-    private IEnumerator PlayCommentaryQueue(List<AudioClip> queue)
+    // Runs for the whole shot, live with the action instead of waiting for it to finish:
+    // 1) plays the ball-name clip immediately - it's predicted from the pre-shot aim classification
+    //    (pendingCommentaryObjectBall), the only thing knowable the instant the cue strikes;
+    // 2) then waits for shotHasResolved (set by PlayCommentaryForFinishedShot once foul/pot/miss is
+    //    actually known - that can't happen any earlier than the real result exists);
+    // 3) then plays the result clip(s) after a short commentaryDelay beat.
+    // A safety timeout (commentaryTimeoutSeconds), measured from when the shot was struck, covers
+    // both the wait and the playback, so the next shot can never be blocked forever. IsCommentaryPlaying
+    // stays true for the whole thing and is only cleared once, right at the end - see
+    // IsAimFrozen/ConfirmButtonPressed/RequestStrike/MyTurnToAct, which is what actually holds the next
+    // shot back.
+    private IEnumerator PlayShotCommentary()
     {
-        if (queue.Count == 0) yield break;
-        yield return new WaitForSeconds(commentaryDelay);
-
         var source = GetCommentaryAudioSource();
-        foreach (var clip in queue)
+        float deadline = Time.time + commentaryTimeoutSeconds;
+
+        AudioClip nameClip = playBallNameClip ? BallNameClip(GetBallType(pendingCommentaryObjectBall)) : null;
+        if (nameClip != null)
         {
-            if (clip == null) continue; // belt-and-braces - skip an empty slot quietly, no errors
-            source.Stop(); // cut whatever's still playing before starting the next line
-            source.PlayOneShot(clip);
-            yield return new WaitForSeconds(clip.length);
+            source.Stop();
+            source.PlayOneShot(nameClip);
+            yield return new WaitForSeconds(nameClip.length);
         }
+
+        while (!shotHasResolved && Time.time < deadline) yield return null;
+
+        List<AudioClip> resultQueue = BuildCommentaryQueue();
+        pendingCommentaryObjectBall = null; // consumed - this shot's result can't be reused for the next one
+
+        if (resultQueue.Count > 0 && Time.time < deadline)
+        {
+            yield return new WaitForSeconds(commentaryDelay);
+            foreach (var clip in resultQueue)
+            {
+                if (clip == null) continue; // belt-and-braces - skip an empty slot quietly, no errors
+
+                if (Time.time > deadline)
+                {
+                    Debug.LogWarning($"[GMDebug] Commentary passed its {commentaryTimeoutSeconds}s " +
+                                      "safety timeout - skipping the rest so the next shot isn't blocked forever.");
+                    break;
+                }
+
+                source.Stop(); // cut whatever's still playing before starting the next line
+                source.PlayOneShot(clip);
+                yield return new WaitForSeconds(clip.length);
+            }
+        }
+
+        isCommentaryPlaying = false;
     }
 
     // Random index into pool, excluding whichever index played last time from THIS SAME pool array -

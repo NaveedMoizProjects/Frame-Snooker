@@ -268,6 +268,7 @@ public class SnookerAI : MonoBehaviour
             && gameManager.isNextPlay()
             && !gameManager.IsConfirmMode
             && !gameManager.IsStrikeRequested
+            && !gameManager.IsCommentaryPlaying // wait for the last shot's commentary to finish first
             && !waitingForShot;
     }
 

@@ -92,8 +92,13 @@ public class CueVisualController : MonoBehaviour
         // has free aim right up to pressing Confirm).
         if (GameManager.Instance != null && GameManager.Instance.IsAiTurn) return;
 
+        // On Android (and other touch platforms) a single finger is also emulated as mouse button 0,
+        // so both blocks below would otherwise fire for the same physical swipe and add up, doubling
+        // the effective rotation. Touch takes priority whenever there's an active touch.
+        bool touchActive = enableTouchControl && Input.touchCount > 0;
+
         // Mouse drag
-        if (enableMouseControl)
+        if (enableMouseControl && !touchActive)
         {
             if (Input.GetMouseButtonDown(0))
                 dragStartedOverUI = IsPointerOverUI(-1);
@@ -120,7 +125,7 @@ public class CueVisualController : MonoBehaviour
             if (t.phase == TouchPhase.Moved && !dragStartedOverUI)
             {
                 float dx = t.deltaPosition.x / Mathf.Max(Screen.width, 1f); // normalized
-                angleY += dx * rotationSensitivity * 0.5f; // scale
+                angleY += dx * rotationSensitivity * 0.25f; // scale (reduced for finer aim control)
             }
         }
     }

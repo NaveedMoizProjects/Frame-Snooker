@@ -30,7 +30,7 @@ public class ScoreboardUI : MonoBehaviour
 
     [Header("Ball-on indicator (top-left of Canvas)")]
     [Tooltip("Shows 'Ball on: <colour>' (or 'Ball on: Red'), live via GameManager.OnTargetChanged. Positioned separately from hudmid.")]
-    [SerializeField] private TextMeshProUGUI ballOnLabel;
+    //[SerializeField] private TextMeshProUGUI ballOnLabel;
 
     // Real ball colours for the potted-ball dots, so a red pot shows a red dot, a blue pot a blue
     // dot, etc. Mirrors SelectedColourIndicator's colour choices for the colours they share, extended
@@ -77,6 +77,13 @@ public class ScoreboardUI : MonoBehaviour
         // The template lives in the scene purely to be cloned - it's never shown itself.
         if (ballIconTemplate != null) ballIconTemplate.SetActive(false);
 
+        HideLeftoverBallOnStatus();
+
+        // The "Ball on: X" status text is no longer wanted, but the label GameObject itself stays
+        // active as normal scene furniture - only the script-driven status text is switched off (see
+        // HandleTargetChanged below), by clearing it once here and never writing to it again.
+        //if (ballOnLabel != null) ballOnLabel.text = string.Empty;
+
         RefreshAll();
         RefreshBreakDisplay(); // idle "Break: 0" state on scene start
         HandleTargetChanged(gameManager.CurrentTargetState, gameManager.CurrentTargetColour);
@@ -90,15 +97,21 @@ public class ScoreboardUI : MonoBehaviour
         gameManager.OnTargetChanged -= HandleTargetChanged;
     }
 
-    // Mirrors SelectedColourIndicator's own subscription to the same event - "Ball on: Red" while
-    // reds are still up, "Ball on: <colour>" once nominated/in the fixed colour sequence, or a
-    // neutral placeholder while on Colour with nothing chosen yet (needs nomination).
+    // "BallOnStatus" is a plain leftover text object (no script attached to it at all - it isn't even
+    // saved in the scene file) that can end up sitting under the Canvas showing a stale "Ball on: X"
+    // line. Finds it by name and disables it if present; does nothing if it isn't there.
+    private void HideLeftoverBallOnStatus()
+    {
+        var leftover = GameObject.Find("BallOnStatus");
+        if (leftover != null) leftover.SetActive(false);
+    }
+
+    // The "Ball on: X" status text is switched off - GameManager's own "which ball is on" logic is
+    // untouched and this event still fires as before, this just no longer writes any status text
+    // into the label. Kept as a real (if empty) method rather than removing the subscription, so
+    // re-enabling the status later is a one-line change back. Null-safe if the label is ever missing.
     private void HandleTargetChanged(GameManager.TargetBallState state, BallType? colour)
     {
-        if (ballOnLabel == null) return;
-        ballOnLabel.text = state == GameManager.TargetBallState.Red
-            ? "Ball on: Red"
-            : colour.HasValue ? $"Ball on: {colour.Value}" : "Ball on: Colour";
     }
 
     private void HandleScoreChanged(int playerIndex, int newScore)
